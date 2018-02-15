@@ -3,6 +3,7 @@
  * Copyright (c) 2009	   Shrikar Archak
  * Copyright (c) 2003-2017 Stony Brook University
  * Copyright (c) 2003-2017 The Research Foundation of SUNY
+ * Copyright (c) 2018	   Swapnil Ingle <1985swapnil@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -64,12 +65,30 @@ static int wrapfs_readdir(struct file *file, struct dir_context *ctx)
 	return err;
 }
 
+static int wrapfs_ioctl(struct file *file, unsigned int cmd)
+{
+	struct dentry *dentry = file_dentry(file);
+
+	switch (cmd) {
+	case WRAPFS_IOC_HIDE:
+		printk("WRAPFS_IOC_HIDE %s\n", dentry->d_name.name);
+		break;
+	case WRAPFS_IOC_UNHIDE:
+		printk("WRAPFS_IOC_UNHIDE %s\n", dentry->d_name.name);
+		break;
+	}
+	return 0;
+}
+
 static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 				  unsigned long arg)
 {
 	long err = -ENOTTY;
 	struct file *lower_file;
 
+	err = wrapfs_ioctl(file, cmd);
+	if (err)
+		goto out;
 	lower_file = wrapfs_lower_file(file);
 
 	/* XXX: use vfs_ioctl if/when VFS exports it */
@@ -93,6 +112,9 @@ static long wrapfs_compat_ioctl(struct file *file, unsigned int cmd,
 	long err = -ENOTTY;
 	struct file *lower_file;
 
+	err = wrapfs_ioctl(file, cmd);
+	if (err)
+		goto out;
 	lower_file = wrapfs_lower_file(file);
 
 	/* XXX: use vfs_ioctl if/when VFS exports it */

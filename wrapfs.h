@@ -41,9 +41,14 @@
 /* useful for tracking code reachability */
 #define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
 
+/* miscellaneous ioctls */
 #define WRAPFS_IOC_HIDE_ALL	_IO('h', 1)
 #define WRAPFS_IOC_UNHIDE_ALL	_IO('h', 2)
 #define WRAPFS_IOC_HIDE_LIST	_IO('h', 3)
+
+/* file/directory specific ioctls */
+#define WRAPFS_IOC_HIDE		_IO('h', 4)
+#define WRAPFS_IOC_UNHIDE	_IO('h', 5)
 
 /* operations vectors defined in specific files */
 extern const struct file_operations wrapfs_main_fops;
