@@ -71,7 +71,6 @@ static int wrapfs_inode_set(struct inode *inode, void *lower_inode)
 
 struct inode *wrapfs_iget(struct super_block *sb, struct inode *lower_inode)
 {
-	struct wrapfs_inode_info *info;
 	struct inode *inode; /* the new inode to return */
 
 	if (!igrab(lower_inode))
@@ -95,9 +94,6 @@ struct inode *wrapfs_iget(struct super_block *sb, struct inode *lower_inode)
 		iput(lower_inode);
 		return inode;
 	}
-
-	/* initialize new inode */
-	info = WRAPFS_I(inode);
 
 	inode->i_ino = lower_inode->i_ino;
 	wrapfs_set_lower_inode(inode, lower_inode);
@@ -229,12 +225,27 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 	lower_dir_dentry = lower_parent_path->dentry;
 	lower_dir_mnt = lower_parent_path->mnt;
 
+#if 0
 	/* Use vfs_path_lookup to check if the dentry exists or not */
 	err = vfs_path_lookup(lower_dir_dentry, lower_dir_mnt, name, 0,
 			      &lower_path);
+#endif
+	mutex_lock(&(d_inode(lower_dir_dentry))->i_mutex);
+	lower_dentry = lookup_one_len(name, lower_dir_dentry,
+				      dentry->d_name.len);
+	mutex_unlock(&(d_inode(lower_dir_dentry))->i_mutex);
+	if (IS_ERR(lower_dentry)) {
+		printk("%s: failed to get dentry\n", __func__);
+		err = -ENOENT;
+		goto out;
+	}
 
 	/* no error: handle positive dentries */
-	if (!err) {
+	if (d_really_is_positive(lower_dentry)) {
+		lower_path.mnt = mntget(lower_dir_mnt);
+		lower_path.dentry = lower_dentry;
+		//path_get(&lower_path);
+
 		wrapfs_set_lower_path(dentry, &lower_path);
 		ret_dentry =
 			__wrapfs_interpose(dentry, dentry->d_sb, &lower_path);
@@ -246,17 +257,11 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 		goto out;
 	}
 
-	/*
-	 * We don't consider ENOENT an error, and we want to return a
-	 * negative dentry.
-	 */
-	if (err && err != -ENOENT)
-		goto out;
-
+	dput(lower_dentry);
 	/* instatiate a new negative dentry */
 	this.name = name;
 	this.len = strlen(name);
-	this.hash = full_name_hash(lower_dir_dentry, this.name, this.len);
+	this.hash = full_name_hash(this.name, this.len);
 	lower_dentry = d_lookup(lower_dir_dentry, &this);
 	if (lower_dentry)
 		goto setup_lower;
@@ -272,14 +277,6 @@ setup_lower:
 	lower_path.dentry = lower_dentry;
 	lower_path.mnt = mntget(lower_dir_mnt);
 	wrapfs_set_lower_path(dentry, &lower_path);
-
-	/*
-	 * If the intent is to create a file, then don't return an error, so
-	 * the VFS will continue the process of making this negative dentry
-	 * into a positive one.
-	 */
-	if (err == -ENOENT || (flags & (LOOKUP_CREATE|LOOKUP_RENAME_TARGET)))
-		err = 0;
 
 out:
 	if (err)

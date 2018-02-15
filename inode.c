@@ -233,8 +233,7 @@ out:
  * superblock-level name-space lock for renames and copy-ups.
  */
 static int wrapfs_rename(struct inode *old_dir, struct dentry *old_dentry,
-			 struct inode *new_dir, struct dentry *new_dentry,
-			 unsigned int flags)
+			 struct inode *new_dir, struct dentry *new_dentry)
 {
 	int err = 0;
 	struct dentry *lower_old_dentry = NULL;
@@ -243,9 +242,6 @@ static int wrapfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	struct dentry *lower_new_dir_dentry = NULL;
 	struct dentry *trap = NULL;
 	struct path lower_old_path, lower_new_path;
-
-	if (flags)
-		return -EINVAL;
 
 	wrapfs_get_lower_path(old_dentry, &lower_old_path);
 	wrapfs_get_lower_path(new_dentry, &lower_new_path);
@@ -315,38 +311,6 @@ out:
 	return err;
 }
 
-static const char *wrapfs_get_link(struct dentry *dentry, struct inode *inode,
-				   struct delayed_call *done)
-{
-	char *buf;
-	int len = PAGE_SIZE, err;
-	mm_segment_t old_fs;
-
-	if (!dentry)
-		return ERR_PTR(-ECHILD);
-
-	/* This is freed by the put_link method assuming a successful call. */
-	buf = kmalloc(len, GFP_KERNEL);
-	if (!buf) {
-		buf = ERR_PTR(-ENOMEM);
-		return buf;
-	}
-
-	/* read the symlink, and then we will follow it */
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-	err = wrapfs_readlink(dentry, buf, len);
-	set_fs(old_fs);
-	if (err < 0) {
-		kfree(buf);
-		buf = ERR_PTR(err);
-	} else {
-		buf[err] = '\0';
-	}
-	set_delayed_call(done, kfree_link, buf);
-	return buf;
-}
-
 static int wrapfs_permission(struct inode *inode, int mask)
 {
 	struct inode *lower_inode;
@@ -368,6 +332,7 @@ static int wrapfs_setattr(struct dentry *dentry, struct iattr *ia)
 
 	inode = d_inode(dentry);
 
+#if 0
 	/*
 	 * Check if user has permission to change inode.  We don't check if
 	 * this user can change the lower inode: that should happen when
@@ -376,6 +341,7 @@ static int wrapfs_setattr(struct dentry *dentry, struct iattr *ia)
 	err = setattr_prepare(dentry, ia);
 	if (err)
 		goto out_err;
+#endif
 
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
@@ -431,7 +397,9 @@ static int wrapfs_setattr(struct dentry *dentry, struct iattr *ia)
 
 out:
 	wrapfs_put_lower_path(dentry, &lower_path);
+#if 0
 out_err:
+#endif
 	return err;
 }
 
@@ -456,18 +424,14 @@ out:
 }
 
 static int
-wrapfs_setxattr(struct dentry *dentry, struct inode *inode, const char *name,
-		const void *value, size_t size, int flags)
+wrapfs_setxattr(struct dentry *dentry, const char *name, const void *value,
+		size_t size, int flags)
 {
 	int err; struct dentry *lower_dentry;
 	struct path lower_path;
 
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
-	if (!(d_inode(lower_dentry)->i_opflags & IOP_XATTR)) {
-		err = -EOPNOTSUPP;
-		goto out;
-	}
 	err = vfs_setxattr(lower_dentry, name, value, size, flags);
 	if (err)
 		goto out;
@@ -479,8 +443,8 @@ out:
 }
 
 static ssize_t
-wrapfs_getxattr(struct dentry *dentry, struct inode *inode,
-		const char *name, void *buffer, size_t size)
+wrapfs_getxattr(struct dentry *dentry, const char *name,
+		void *buffer, size_t size)
 {
 	int err;
 	struct dentry *lower_dentry;
@@ -489,11 +453,7 @@ wrapfs_getxattr(struct dentry *dentry, struct inode *inode,
 
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
-	lower_inode = wrapfs_lower_inode(inode);
-	if (!(d_inode(lower_dentry)->i_opflags & IOP_XATTR)) {
-		err = -EOPNOTSUPP;
-		goto out;
-	}
+	lower_inode = d_inode(lower_dentry);
 	err = vfs_getxattr(lower_dentry, name, buffer, size);
 	if (err)
 		goto out;
@@ -513,10 +473,6 @@ wrapfs_listxattr(struct dentry *dentry, char *buffer, size_t buffer_size)
 
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
-	if (!(d_inode(lower_dentry)->i_opflags & IOP_XATTR)) {
-		err = -EOPNOTSUPP;
-		goto out;
-	}
 	err = vfs_listxattr(lower_dentry, buffer, buffer_size);
 	if (err)
 		goto out;
@@ -528,7 +484,7 @@ out:
 }
 
 static int
-wrapfs_removexattr(struct dentry *dentry, struct inode *inode, const char *name)
+wrapfs_removexattr(struct dentry *dentry, const char *name)
 {
 	int err;
 	struct dentry *lower_dentry;
@@ -537,11 +493,7 @@ wrapfs_removexattr(struct dentry *dentry, struct inode *inode, const char *name)
 
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
-	lower_inode = wrapfs_lower_inode(inode);
-	if (!(lower_inode->i_opflags & IOP_XATTR)) {
-		err = -EOPNOTSUPP;
-		goto out;
-	}
+	lower_inode = d_inode(lower_dentry);;
 	err = vfs_removexattr(lower_dentry, name);
 	if (err)
 		goto out;
@@ -556,7 +508,6 @@ const struct inode_operations wrapfs_symlink_iops = {
 	.permission	= wrapfs_permission,
 	.setattr	= wrapfs_setattr,
 	.getattr	= wrapfs_getattr,
-	.get_link	= wrapfs_get_link,
 	.listxattr	= wrapfs_listxattr,
 };
 
@@ -584,22 +535,21 @@ const struct inode_operations wrapfs_main_iops = {
 };
 
 static int wrapfs_xattr_get(const struct xattr_handler *handler,
-			    struct dentry *dentry, struct inode *inode,
-			    const char *name, void *buffer, size_t size)
+			    struct dentry *dentry, const char *name,
+			    void *buffer, size_t size)
 {
-	return wrapfs_getxattr(dentry, inode, name, buffer, size);
+	return wrapfs_getxattr(dentry, name, buffer, size);
 }
 
 static int wrapfs_xattr_set(const struct xattr_handler *handler,
-			    struct dentry *dentry, struct inode *inode,
-			    const char *name, const void *value, size_t size,
-			    int flags)
+			    struct dentry *dentry, const char *name,
+			    const void *value, size_t size, int flags)
 {
 	if (value)
-		return wrapfs_setxattr(dentry, inode, name, value, size, flags);
+		return wrapfs_setxattr(dentry, name, value, size, flags);
 
 	BUG_ON(flags != XATTR_REPLACE);
-	return wrapfs_removexattr(dentry, inode, name);
+	return wrapfs_removexattr(dentry, name);
 }
 
 const struct xattr_handler wrapfs_xattr_handler = {

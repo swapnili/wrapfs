@@ -72,7 +72,8 @@ out:
 	return err;
 }
 
-static ssize_t wrapfs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
+static ssize_t wrapfs_direct_IO(struct kiocb *iocb, struct iov_iter *iter,
+				loff_t offset)
 {
 	/*
 	 * This function should never be called directly.  We need it

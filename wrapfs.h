@@ -28,6 +28,8 @@
 #include <linux/xattr.h>
 #include <linux/exportfs.h>
 
+#define WRAPFS_SUPER_MAGIC      0xb550ca10
+
 /* the file system name */
 #define WRAPFS_NAME "wrapfs"
 
