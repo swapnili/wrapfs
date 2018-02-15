@@ -3,6 +3,7 @@
  * Copyright (c) 2009	   Shrikar Archak
  * Copyright (c) 2003-2017 Stony Brook University
  * Copyright (c) 2003-2017 The Research Foundation of SUNY
+ * Copyright (c) 2018	   Swapnil Ingle <1985swapnil@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -150,12 +151,20 @@ static int __init init_wrapfs_fs(void)
 	err = wrapfs_init_dentry_cache();
 	if (err)
 		goto out;
+	err = wrapfs_ioctl_init();
+	if (err)
+		goto out;
+
 	err = register_filesystem(&wrapfs_fs_type);
+	if (err)
+		goto unreg_ioctl;
+	return err;
+
+unreg_ioctl:
+	wrapfs_ioctl_exit();
 out:
-	if (err) {
-		wrapfs_destroy_inode_cache();
-		wrapfs_destroy_dentry_cache();
-	}
+	wrapfs_destroy_inode_cache();
+	wrapfs_destroy_dentry_cache();
 	return err;
 }
 
@@ -163,6 +172,7 @@ static void __exit exit_wrapfs_fs(void)
 {
 	wrapfs_destroy_inode_cache();
 	wrapfs_destroy_dentry_cache();
+	wrapfs_ioctl_exit();
 	unregister_filesystem(&wrapfs_fs_type);
 	pr_info("Completed wrapfs module unload\n");
 }

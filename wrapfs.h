@@ -3,6 +3,7 @@
  * Copyright (c) 2009	   Shrikar Archak
  * Copyright (c) 2003-2017 Stony Brook University
  * Copyright (c) 2003-2017 The Research Foundation of SUNY
+ * Copyright (c) 2018	   Swapnil Ingle <1985swapnil@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -27,6 +28,7 @@
 #include <linux/sched.h>
 #include <linux/xattr.h>
 #include <linux/exportfs.h>
+#include <linux/miscdevice.h>
 
 #define WRAPFS_SUPER_MAGIC      0xb550ca10
 
@@ -38,6 +40,10 @@
 
 /* useful for tracking code reachability */
 #define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
+
+#define WRAPFS_IOC_HIDE_ALL	_IO('h', 1)
+#define WRAPFS_IOC_UNHIDE_ALL	_IO('h', 2)
+#define WRAPFS_IOC_HIDE_LIST	_IO('h', 3)
 
 /* operations vectors defined in specific files */
 extern const struct file_operations wrapfs_main_fops;
@@ -64,6 +70,9 @@ extern struct inode *wrapfs_iget(struct super_block *sb,
 				 struct inode *lower_inode);
 extern int wrapfs_interpose(struct dentry *dentry, struct super_block *sb,
 			    struct path *lower_path);
+
+extern int wrapfs_ioctl_init(void);
+extern void wrapfs_ioctl_exit(void);
 
 /* file private data */
 struct wrapfs_file_info {
