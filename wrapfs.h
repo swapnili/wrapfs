@@ -38,17 +38,38 @@
 /* wrapfs root inode number */
 #define WRAPFS_ROOT_INO     1
 
+#define MAXNAMELEN	128
 /* useful for tracking code reachability */
 #define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
 
-/* miscellaneous ioctls */
-#define WRAPFS_IOC_HIDE_ALL	_IO('h', 1)
-#define WRAPFS_IOC_UNHIDE_ALL	_IO('h', 2)
-#define WRAPFS_IOC_HIDE_LIST	_IO('h', 3)
+struct wrapfs_misc_ioctl {
+	unsigned long sz;
+	unsigned long ino;
+	char path[MAXNAMELEN];
+};
 
-/* file/directory specific ioctls */
-#define WRAPFS_IOC_HIDE		_IO('h', 4)
-#define WRAPFS_IOC_UNHIDE	_IO('h', 5)
+struct wrapfs_hnode {
+	struct hlist_node hnode;
+	char *fname;
+	unsigned long inode;
+	unsigned int flags;
+};
+
+/* miscellaneous ioctls */
+#define WRAPFS_IOC_HIDE		_IO('h', 1)
+#define WRAPFS_IOC_UNHIDE	_IO('h', 2)
+#define WRAPFS_IOC_BLOCK	_IO('h', 3)
+#define WRAPFS_IOC_UNBLOCK	_IO('h', 4)
+#define WRAPFS_IOC_HIDE_LIST	_IO('h', 5)
+
+/* flags */
+#define WRAPFS_HIDE	(1 << 0)
+#define WRAPFS_BLOCK	(1 << 1)
+
+int wrapfs_is_hidden(const char *path, unsigned long ino);
+int wrapfs_block_file(const char *fname, unsigned long ino);
+void wrapfs_remove_hnode(const char *fname, unsigned long ino);
+int wrapfs_is_blocked(const char *fname, unsigned long inode);
 
 /* operations vectors defined in specific files */
 extern const struct file_operations wrapfs_main_fops;

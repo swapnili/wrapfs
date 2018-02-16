@@ -3,6 +3,7 @@
  * Copyright (c) 2009	   Shrikar Archak
  * Copyright (c) 2003-2017 Stony Brook University
  * Copyright (c) 2003-2017 The Research Foundation of SUNY
+ * Copyright (c) 2018      Swapnil Ingle <1985swapnil@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -108,6 +109,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		  wrapfs_lower_inode(d_inode(dentry))->i_nlink);
 	d_inode(dentry)->i_ctime = dir->i_ctime;
 	d_drop(dentry); /* this is needed, else LTP fails (VFS won't do it) */
+	wrapfs_remove_hnode(dentry->d_name.name, dentry->d_inode->i_ino);
 out:
 	unlock_dir(lower_dir_dentry);
 	dput(lower_dentry);

@@ -50,45 +50,63 @@ static ssize_t wrapfs_write(struct file *file, const char __user *buf,
 	return err;
 }
 
+struct wrapfs_dir_context {
+	struct dir_context wrapfs_ctx;
+	struct dir_context *caller_ctx;
+};
+
+static int wrapfs_filldir(struct dir_context *ctx, const char *lower_name, int
+			  lower_namelen, loff_t offset, u64 ino, unsigned int
+			  d_type)
+{
+	struct wrapfs_dir_context *buf = container_of(ctx, struct
+						      wrapfs_dir_context,
+						      wrapfs_ctx);
+	int err = 0;
+
+	buf->caller_ctx->pos = buf->wrapfs_ctx.pos;
+	if (wrapfs_is_hidden(lower_name, ino) == 0) {
+		err = !dir_emit(buf->caller_ctx, lower_name, lower_namelen, ino,
+				d_type);
+	}
+	return err;
+}
+
 static int wrapfs_readdir(struct file *file, struct dir_context *ctx)
 {
 	int err;
 	struct file *lower_file = NULL;
 	struct dentry *dentry = file->f_path.dentry;
+	struct wrapfs_dir_context buf = {
+		.wrapfs_ctx.actor = wrapfs_filldir,
+		.caller_ctx = ctx,
+	};
 
 	lower_file = wrapfs_lower_file(file);
-	err = iterate_dir(lower_file, ctx);
-	file->f_pos = lower_file->f_pos;
+	err = iterate_dir(lower_file, &buf.wrapfs_ctx);
+	ctx->pos = buf.wrapfs_ctx.pos;
+	if (err < 0)
+		goto out;
 	if (err >= 0)		/* copy the atime */
 		fsstack_copy_attr_atime(d_inode(dentry),
 					file_inode(lower_file));
+
+out:
 	return err;
-}
-
-static int wrapfs_ioctl(struct file *file, unsigned int cmd)
-{
-	struct dentry *dentry = file_dentry(file);
-
-	switch (cmd) {
-	case WRAPFS_IOC_HIDE:
-		printk("WRAPFS_IOC_HIDE %s\n", dentry->d_name.name);
-		break;
-	case WRAPFS_IOC_UNHIDE:
-		printk("WRAPFS_IOC_UNHIDE %s\n", dentry->d_name.name);
-		break;
-	}
-	return 0;
 }
 
 static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 				  unsigned long arg)
 {
+	struct dentry *dentry = file_dentry(file);
+	struct inode *inode = file_inode(file);
 	long err = -ENOTTY;
 	struct file *lower_file;
 
-	err = wrapfs_ioctl(file, cmd);
-	if (err)
+	if (cmd == WRAPFS_IOC_BLOCK) {
+		err = wrapfs_block_file(dentry->d_name.name, inode->i_ino);
 		goto out;
+	}
 	lower_file = wrapfs_lower_file(file);
 
 	/* XXX: use vfs_ioctl if/when VFS exports it */
@@ -109,12 +127,15 @@ out:
 static long wrapfs_compat_ioctl(struct file *file, unsigned int cmd,
 				unsigned long arg)
 {
+	struct dentry *dentry = file_dentry(file);
+	struct inode *inode = file_inode(file);
 	long err = -ENOTTY;
 	struct file *lower_file;
 
-	err = wrapfs_ioctl(file, cmd);
-	if (err)
+	if (cmd == WRAPFS_IOC_BLOCK) {
+		err = wrapfs_block_file(dentry->d_name.name, inode->i_ino);
 		goto out;
+	}
 	lower_file = wrapfs_lower_file(file);
 
 	/* XXX: use vfs_ioctl if/when VFS exports it */
