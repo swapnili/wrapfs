@@ -3,6 +3,7 @@
  * Copyright (c) 2009	   Shrikar Archak
  * Copyright (c) 2003-2017 Stony Brook University
  * Copyright (c) 2003-2017 The Research Foundation of SUNY
+ * Copyright (c) 2018	   Swapnil Ingle <1985swapnil@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -224,12 +225,6 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 	/* now start the actual lookup procedure */
 	lower_dir_dentry = lower_parent_path->dentry;
 	lower_dir_mnt = lower_parent_path->mnt;
-
-#if 0
-	/* Use vfs_path_lookup to check if the dentry exists or not */
-	err = vfs_path_lookup(lower_dir_dentry, lower_dir_mnt, name, 0,
-			      &lower_path);
-#endif
 	mutex_lock(&(d_inode(lower_dir_dentry))->i_mutex);
 	lower_dentry = lookup_one_len(name, lower_dir_dentry,
 				      dentry->d_name.len);
@@ -242,10 +237,12 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 
 	/* no error: handle positive dentries */
 	if (d_really_is_positive(lower_dentry)) {
+		printk("lookup %s %lu\n", name, d_inode(lower_dentry)->i_ino);
+		if (wrapfs_is_blocked(name, d_inode(lower_dentry)->i_ino))
+			goto setup_lower;
+
 		lower_path.mnt = mntget(lower_dir_mnt);
 		lower_path.dentry = lower_dentry;
-		//path_get(&lower_path);
-
 		wrapfs_set_lower_path(dentry, &lower_path);
 		ret_dentry =
 			__wrapfs_interpose(dentry, dentry->d_sb, &lower_path);
@@ -257,11 +254,11 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 		goto out;
 	}
 
-	dput(lower_dentry);
-	/* instatiate a new negative dentry */
 	this.name = name;
 	this.len = strlen(name);
 	this.hash = full_name_hash(this.name, this.len);
+	dput(lower_dentry);
+	/* instatiate a new negative dentry */
 	lower_dentry = d_lookup(lower_dir_dentry, &this);
 	if (lower_dentry)
 		goto setup_lower;
@@ -274,6 +271,7 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 	d_add(lower_dentry, NULL); /* instantiate and hash */
 
 setup_lower:
+	printk("set lower path for %s\n", name);
 	lower_path.dentry = lower_dentry;
 	lower_path.mnt = mntget(lower_dir_mnt);
 	wrapfs_set_lower_path(dentry, &lower_path);

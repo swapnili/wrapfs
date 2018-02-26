@@ -67,7 +67,8 @@ struct wrapfs_hnode {
 #define WRAPFS_BLOCK	(1 << 1)
 
 int wrapfs_is_hidden(const char *path, unsigned long ino);
-int wrapfs_block_file(const char *fname, unsigned long ino);
+int wrapfs_block_file(struct dentry *dentry, const char *fname,
+		      unsigned long ino);
 void wrapfs_remove_hnode(const char *fname, unsigned long ino);
 int wrapfs_is_blocked(const char *fname, unsigned long inode);
 

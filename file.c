@@ -104,7 +104,8 @@ static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 	struct file *lower_file;
 
 	if (cmd == WRAPFS_IOC_BLOCK) {
-		err = wrapfs_block_file(dentry->d_name.name, inode->i_ino);
+		err = wrapfs_block_file(dentry, dentry->d_name.name,
+					inode->i_ino);
 		goto out;
 	}
 	lower_file = wrapfs_lower_file(file);
@@ -133,7 +134,8 @@ static long wrapfs_compat_ioctl(struct file *file, unsigned int cmd,
 	struct file *lower_file;
 
 	if (cmd == WRAPFS_IOC_BLOCK) {
-		err = wrapfs_block_file(dentry->d_name.name, inode->i_ino);
+		err = wrapfs_block_file(dentry, dentry->d_name.name,
+					inode->i_ino);
 		goto out;
 	}
 	lower_file = wrapfs_lower_file(file);

@@ -105,12 +105,16 @@ int wrapfs_unhide_file(const char *fname, unsigned long ino)
 	return 0;
 }
 
-int wrapfs_block_file(const char *fname, unsigned long ino)
+int wrapfs_block_file(struct dentry *dentry, const char *fname,
+		      unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
+	struct path lower_path;
 	const char *basename = kbasename(fname);
 	unsigned key = KEY(basename);
 
+	/* TODO: dont assume dentry priv data exists */
+	wrapfs_get_lower_path(dentry, &lower_path);
 	wh = get_hnode(fname, ino);
 	if (!wh) {
 		wh = alloc_hnode(fname, ino);
@@ -120,6 +124,10 @@ int wrapfs_block_file(const char *fname, unsigned long ino)
 	}
 
 	wh->flags |= WRAPFS_BLOCK;
+
+	/* unhash dentry */
+	d_drop(dentry);
+	wrapfs_put_lower_path(dentry, &lower_path);
 	printk("block %s:%lu\n", fname, ino);
 	return 0;
 }
@@ -183,7 +191,8 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 		err = wrapfs_unhide_file(wr_ioctl.path, wr_ioctl.ino);
 		break;
 	case WRAPFS_IOC_BLOCK:
-		err = wrapfs_block_file(wr_ioctl.path, wr_ioctl.ino);
+		err = wrapfs_block_file(file_dentry(file), wr_ioctl.path,
+					wr_ioctl.ino);
 		break;
 	case WRAPFS_IOC_UNBLOCK:
 		err = wrapfs_unblock_file(wr_ioctl.path, wr_ioctl.ino);
