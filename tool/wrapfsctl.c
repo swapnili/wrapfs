@@ -14,22 +14,22 @@
 
 const char *progname;
 
-static int hide_file(char **args);
-static int unhide_file(char **args);
-static int block_file(char **args);
-static int unblock_file(char **args);
-static int list_all(char **args);
-static int help(char **args);
+static int hide_file(char **args, int argc);
+static int unhide_file(char **args, int argc);
+static int block_file(char **args, int argc);
+static int unblock_file(char **args, int argc);
+static int list_all(char **args, int argc);
+static int help(char **args, int argc);
 
 struct cmd_opts {
 	const char *cmd;
-	int (*func) (char **args);
+	int (*func) (char **args, int argc);
 	const char *usage;
 } cmds[] = {
-	{"hide",	hide_file,	"hide     <file|directory>"},
-	{"unhide",	unhide_file,	"unhide   <file|directory>"},
-	{"block",	block_file,	"block    <file|directory>"},
-	{"unblock",	unblock_file,	"unblock  <file|directory>"},
+	{"hide",	hide_file,	"hide     <path>"},
+	{"unhide",	unhide_file,	"unhide   <path>"},
+	{"block",	block_file,	"block    <path>"},
+	{"unblock",	unblock_file,	"unblock  <path> <inode_number>"},
 	{"list",	list_all,	"list"},
 	{"help",	help,		"help"},
 };
@@ -85,11 +85,17 @@ void trim(char *fname)
 		fname[sz - 1] = '\0';
 }
 
-static int hide_file(char **args)
+static int hide_file(char **args, int argc)
 {
 	struct wrapfs_ioctl wr_ioctl = {0};
 	int err, cmd;
 	char *dev;
+
+	if (argc < 1) {
+		printf("Not enough agruments\n");
+		usage();
+		return -EINVAL;
+	}
 
 	strcpy(wr_ioctl.path, args[0]);
 	trim(wr_ioctl.path);
@@ -101,14 +107,23 @@ static int hide_file(char **args)
 	cmd = WRAPFS_IOC_HIDE;
 	dev = WRAPFS_CDEV;
 
-	return do_ioctl(dev, cmd, &wr_ioctl);
+	err = do_ioctl(dev, cmd, &wr_ioctl);
+	if (!err)
+		printf("%s hidden\n", wr_ioctl.path);
+	return err;
 }
 
-static int unhide_file(char **args)
+static int unhide_file(char **args, int argc)
 {
 	struct wrapfs_ioctl wr_ioctl = {0};
 	int err, cmd;
 	char *dev;
+
+	if (argc < 1) {
+		printf("Not enough agruments\n");
+		usage();
+		return -EINVAL;
+	}
 
 	strcpy(wr_ioctl.path, args[0]);
 	trim(wr_ioctl.path);
@@ -120,14 +135,23 @@ static int unhide_file(char **args)
 	cmd = WRAPFS_IOC_UNHIDE;
 	dev = WRAPFS_CDEV;
 
-	return do_ioctl(dev, cmd, &wr_ioctl);
+	err = do_ioctl(dev, cmd, &wr_ioctl);
+	if (!err)
+		printf("unhide %s\n", wr_ioctl.path);
+	return err;
 }
 
-static int block_file(char **args)
+static int block_file(char **args, int argc)
 {
 	struct wrapfs_ioctl wr_ioctl = {0};
 	int err, cmd;
 	char *dev;
+
+	if (argc < 1) {
+		printf("Not enough agruments\n");
+		usage();
+		return -EINVAL;
+	}
 
 	strcpy(wr_ioctl.path, args[0]);
 	trim(wr_ioctl.path);
@@ -139,25 +163,36 @@ static int block_file(char **args)
 	cmd = WRAPFS_IOC_BLOCK;
 	dev = wr_ioctl.path;
 
-	return do_ioctl(dev, cmd, &wr_ioctl);
+	err = do_ioctl(dev, cmd, &wr_ioctl);
+	if (!err)
+		printf("blocked %s\n", wr_ioctl.path);
+	return err;
 }
 
-static int unblock_file(char **args)
+static int unblock_file(char **args, int argc)
 {
 	struct wrapfs_ioctl wr_ioctl = {0};
 	char *endp;
 	int err, cmd;
 	char *dev;
 
+	if (argc < 2) {
+		printf("Not enough agruments\n");
+		usage();
+		return -EINVAL;
+	}
+
 	strcpy(wr_ioctl.path, args[0]);
 	trim(wr_ioctl.path);
 	wr_ioctl.ino = strtoul(args[1], &endp, 10);
 
-	printf("unblock %s %s\n", args[0], args[1]);
 	cmd = WRAPFS_IOC_UNBLOCK;
 	dev = WRAPFS_CDEV;
 
-	return do_ioctl(dev, cmd, &wr_ioctl);
+	err = do_ioctl(dev, cmd, &wr_ioctl);
+	if (!err)
+		printf("unblocked %s\n", wr_ioctl.path);
+	return err;
 }
 
 const char *flags_to_str(unsigned int flags)
@@ -171,10 +206,16 @@ const char *flags_to_str(unsigned int flags)
 	return "";
 }
 
-static int list_all(char **args)
+static int list_all(char **args, int argc)
 {
 	struct wrapfs_ioctl wr_ioctl[128] = {0};
 	int fd, count = 0, i;
+
+	if (argc) {
+		printf("Not enough agruments\n");
+		usage();
+		return -EINVAL;
+	}
 
 	fd = open(WRAPFS_CDEV, O_RDWR);
 	if (fd < 0) {
@@ -196,7 +237,7 @@ static int list_all(char **args)
 	return 0;
 }
 
-static int help(char **args)
+static int help(char **args, int argc)
 {
 	usage();
 	return 0;
@@ -215,7 +256,7 @@ int main(int argc, char **argv)
 
 	for (i=0; i<ARRAY_SIZE(cmds); i++) {
 		if (!strcmp(cmds[i].cmd, argv[1]))
-			return cmds[i].func(&argv[2]);
+			return cmds[i].func(&argv[2], argc - 2);
 	}
 
 	printf("unknown option\n");
