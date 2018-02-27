@@ -23,9 +23,6 @@ static int wrapfs_create(struct inode *dir, struct dentry *dentry,
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
 	lower_parent_dentry = lock_parent(lower_dentry);
-	printk("printing lower\n");
-	printk("name %s ino %lu\n", lower_dentry->d_name.name,
-	       d_inode(lower_dentry)->i_ino);
 	if (wrapfs_is_blocked(lower_dentry->d_name.name,
 			      d_inode(lower_dentry)->i_ino)) {
 		err = -EPERM;

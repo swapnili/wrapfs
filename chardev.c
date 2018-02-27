@@ -16,7 +16,7 @@
 
 #define KEY(x)	(crc32(0, (x), strlen(x)))
 
-static DEFINE_HASHTABLE(hidden_files_hash, 4);
+static DEFINE_HASHTABLE(wrapfs_files_hlist, 4);
 
 static struct wrapfs_hnode *get_hnode(const char *path, unsigned long ino)
 {
@@ -24,7 +24,7 @@ static struct wrapfs_hnode *get_hnode(const char *path, unsigned long ino)
 	const char *basename = kbasename(path);
 	unsigned key = KEY(basename);
 
-	hash_for_each_possible(hidden_files_hash, wh, hnode, key) {
+	hash_for_each_possible(wrapfs_files_hlist, wh, hnode, key) {
 		if (wh->inode == ino)
 			return wh;
 	}
@@ -80,7 +80,7 @@ int wrapfs_hide_file(const char *path, unsigned long inode)
 		wh = alloc_hnode(path, inode);
 		if (!wh)
 			return -ENOMEM;
-		hash_add(hidden_files_hash, &wh->hnode, key);
+		hash_add(wrapfs_files_hlist, &wh->hnode, key);
 	}
 
 	wh->flags |= WRAPFS_HIDE;
@@ -122,7 +122,7 @@ int wrapfs_block_file(struct dentry *dentry, const char *path,
 		wh = alloc_hnode(path, ino);
 		if (!wh)
 			return -ENOMEM;
-		hash_add(hidden_files_hash, &wh->hnode, key);
+		hash_add(wrapfs_files_hlist, &wh->hnode, key);
 	}
 
 	wh->flags |= WRAPFS_BLOCK;
@@ -164,7 +164,7 @@ static void wrapfs_hide_list_deinit(void)
 	struct hlist_node *tmp;
 	int i;
 
-	hash_for_each_safe(hidden_files_hash, i, tmp, wh, hnode) {
+	hash_for_each_safe(wrapfs_files_hlist, i, tmp, wh, hnode) {
 		hash_del(&wh->hnode);
 		free_hnode(wh);
 	}
@@ -172,6 +172,8 @@ static void wrapfs_hide_list_deinit(void)
 
 static int wrapfs_ioctl_open(struct inode *inode, struct file *file)
 {
+	file->private_data = NULL;
+
 	return 0;
 }
 
@@ -200,7 +202,7 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 		err = wrapfs_unblock_file(wr_ioctl.path, wr_ioctl.ino);
 		break;
 	default:
-		printk("unknown cmd %x\n", cmd);
+		printk("unknown cmd 0x%x\n", cmd);
 		return -EINVAL;
 	}
 	return err;
@@ -212,7 +214,7 @@ static ssize_t wrapfs_read_hlist(struct file *file, char __user *buf, size_t
 	struct wrapfs_ioctl *ioctl_buf;
 	struct wrapfs_hnode *wh;
 	unsigned int bucket = *ppos, i = 0;
-	unsigned int hashsz = HASH_SIZE(hidden_files_hash);
+	unsigned int hashsz = HASH_SIZE(wrapfs_files_hlist);
 	int ret;
 
 	ioctl_buf = vmalloc(count);
@@ -225,7 +227,7 @@ again:
 		goto out;
 	}
 
-	hlist_for_each_entry(wh, &hidden_files_hash[bucket], hnode) {
+	hlist_for_each_entry(wh, &wrapfs_files_hlist[bucket], hnode) {
 		strcpy(ioctl_buf[i].path, wh->path);
 		ioctl_buf[i].ino = wh->inode;
 		ioctl_buf[i].flags = wh->flags;

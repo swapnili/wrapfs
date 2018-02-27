@@ -237,7 +237,6 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 
 	/* no error: handle positive dentries */
 	if (d_really_is_positive(lower_dentry)) {
-		printk("lookup %s %lu\n", name, d_inode(lower_dentry)->i_ino);
 		if (wrapfs_is_blocked(name, d_inode(lower_dentry)->i_ino))
 			goto setup_lower;
 
@@ -271,7 +270,6 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 	d_add(lower_dentry, NULL); /* instantiate and hash */
 
 setup_lower:
-	printk("set lower path for %s\n", name);
 	lower_path.dentry = lower_dentry;
 	lower_path.mnt = mntget(lower_dir_mnt);
 	wrapfs_set_lower_path(dentry, &lower_path);

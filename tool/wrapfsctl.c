@@ -208,7 +208,7 @@ int main(int argc, char **argv)
 
 	progname = argv[0];
 	if (argc < 2) {
-		printf("Invalid argurments\n");
+		printf("Invalid arguments\n");
 		usage();
 		return -EINVAL;
 	}
