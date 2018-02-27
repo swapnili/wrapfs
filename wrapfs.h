@@ -50,7 +50,7 @@ struct wrapfs_misc_ioctl {
 
 struct wrapfs_hnode {
 	struct hlist_node hnode;
-	char *fname;
+	char *path;
 	unsigned long inode;
 	unsigned int flags;
 };
@@ -67,10 +67,10 @@ struct wrapfs_hnode {
 #define WRAPFS_BLOCK	(1 << 1)
 
 int wrapfs_is_hidden(const char *path, unsigned long ino);
-int wrapfs_block_file(struct dentry *dentry, const char *fname,
+int wrapfs_block_file(struct dentry *dentry, const char *path,
 		      unsigned long ino);
-void wrapfs_remove_hnode(const char *fname, unsigned long ino);
-int wrapfs_is_blocked(const char *fname, unsigned long inode);
+void wrapfs_remove_hnode(const char *path, unsigned long ino);
+int wrapfs_is_blocked(const char *path, unsigned long inode);
 
 /* operations vectors defined in specific files */
 extern const struct file_operations wrapfs_main_fops;

@@ -17,10 +17,10 @@
 
 static DEFINE_HASHTABLE(hidden_files_hash, 4);
 
-static struct wrapfs_hnode *get_hnode(const char *fname, unsigned long ino)
+static struct wrapfs_hnode *get_hnode(const char *path, unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
-	const char *basename = kbasename(fname);
+	const char *basename = kbasename(path);
 	unsigned key = KEY(basename);
 
 	hash_for_each_possible(hidden_files_hash, wh, hnode, key) {
@@ -30,27 +30,27 @@ static struct wrapfs_hnode *get_hnode(const char *fname, unsigned long ino)
 	return NULL;
 }
 
-int wrapfs_is_hidden(const char *fname, unsigned long inode)
+int wrapfs_is_hidden(const char *path, unsigned long inode)
 {
 	struct wrapfs_hnode *wh;
 
-	wh = get_hnode(fname, inode);
+	wh = get_hnode(path, inode);
 	if (!wh)
 		return 0;
 	return wh->flags & WRAPFS_HIDE ? 1 : 0;
 }
 
-int wrapfs_is_blocked(const char *fname, unsigned long inode)
+int wrapfs_is_blocked(const char *path, unsigned long inode)
 {
 	struct wrapfs_hnode *wh;
 
-	wh = get_hnode(fname, inode);
+	wh = get_hnode(path, inode);
 	if (!wh)
 		return 0;
 	return wh->flags & WRAPFS_BLOCK ? 1 : 0;
 }
 
-static struct wrapfs_hnode *alloc_hnode(const char *fname,
+static struct wrapfs_hnode *alloc_hnode(const char *path,
 					       unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
@@ -59,8 +59,8 @@ static struct wrapfs_hnode *alloc_hnode(const char *fname,
 	if (!wh)
 		return NULL;
 
-	wh->fname = kstrdup(fname, GFP_KERNEL);
-	if (!wh->fname) {
+	wh->path = kstrdup(path, GFP_KERNEL);
+	if (!wh->path) {
 		kfree(wh);
 		return NULL;
 	}
@@ -68,57 +68,57 @@ static struct wrapfs_hnode *alloc_hnode(const char *fname,
 	return wh;
 }
 
-int wrapfs_hide_file(const char *fname, unsigned long inode)
+int wrapfs_hide_file(const char *path, unsigned long inode)
 {
 	struct wrapfs_hnode *wh;
-	const char *basename = kbasename(fname);
+	const char *basename = kbasename(path);
 	unsigned key = KEY(basename);
 
-	wh = get_hnode(fname, inode);
+	wh = get_hnode(path, inode);
 	if (!wh) {
-		wh = alloc_hnode(fname, inode);
+		wh = alloc_hnode(path, inode);
 		if (!wh)
 			return -ENOMEM;
 		hash_add(hidden_files_hash, &wh->hnode, key);
 	}
 
 	wh->flags |= WRAPFS_HIDE;
-	printk("hide %s:%lu\n", fname, inode);
+	printk("hide %s:%lu\n", path, inode);
 	return 0;
 }
 
 static void free_hnode(struct wrapfs_hnode *wh)
 {
-	kfree(wh->fname);
+	kfree(wh->path);
 	kfree(wh);
 }
 
-int wrapfs_unhide_file(const char *fname, unsigned long ino)
+int wrapfs_unhide_file(const char *path, unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
 
-	wh = get_hnode(fname, ino);
+	wh = get_hnode(path, ino);
 	if (!wh)
 		return -ENOENT;
 
 	wh->flags &= ~WRAPFS_HIDE;
-	printk("unhide %s:%lu\n", fname, ino);
+	printk("unhide %s:%lu\n", path, ino);
 	return 0;
 }
 
-int wrapfs_block_file(struct dentry *dentry, const char *fname,
+int wrapfs_block_file(struct dentry *dentry, const char *path,
 		      unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
 	struct path lower_path;
-	const char *basename = kbasename(fname);
+	const char *basename = kbasename(path);
 	unsigned key = KEY(basename);
 
 	/* TODO: dont assume dentry priv data exists */
 	wrapfs_get_lower_path(dentry, &lower_path);
-	wh = get_hnode(fname, ino);
+	wh = get_hnode(path, ino);
 	if (!wh) {
-		wh = alloc_hnode(fname, ino);
+		wh = alloc_hnode(path, ino);
 		if (!wh)
 			return -ENOMEM;
 		hash_add(hidden_files_hash, &wh->hnode, key);
@@ -129,28 +129,28 @@ int wrapfs_block_file(struct dentry *dentry, const char *fname,
 	/* unhash dentry */
 	d_drop(dentry);
 	wrapfs_put_lower_path(dentry, &lower_path);
-	printk("block %s:%lu\n", fname, ino);
+	printk("block %s:%lu\n", path, ino);
 	return 0;
 }
 
-int wrapfs_unblock_file(const char *fname, unsigned long ino)
+int wrapfs_unblock_file(const char *path, unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
 
-	wh = get_hnode(fname, ino);
+	wh = get_hnode(path, ino);
 	if (!wh)
 		return -ENOENT;
 
 	wh->flags &= ~WRAPFS_BLOCK;
-	printk("unblock %s:%lu\n", fname, ino);
+	printk("unblock %s:%lu\n", path, ino);
 	return 0;
 }
 
-void wrapfs_remove_hnode(const char *fname, unsigned long ino)
+void wrapfs_remove_hnode(const char *path, unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
 
-	wh = get_hnode(fname, ino);
+	wh = get_hnode(path, ino);
 	if (wh) {
 		hash_del(&wh->hnode);
 		free_hnode(wh);
@@ -218,7 +218,7 @@ again:
 		return -ENOENT;
 
 	hlist_for_each_entry(wh, &hidden_files_hash[bucket], hnode) {
-		strcpy(wr_ioctl[i].path, wh->fname);
+		strcpy(wr_ioctl[i].path, wh->path);
 		wr_ioctl[i].ino = wh->inode;
 		wr_ioctl[i].flags = wh->flags;
 		i++;
