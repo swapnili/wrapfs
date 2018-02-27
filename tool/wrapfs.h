@@ -12,7 +12,7 @@
 #define WRAPFS_HIDE	(1 << 0)
 #define WRAPFS_BLOCK	(1 << 1)
 
-struct wrapfs_misc_ioctl {
+struct wrapfs_ioctl {
 	unsigned long ino;
 	char path[MAXNAMELEN];
 	unsigned int flags;

@@ -177,7 +177,7 @@ static int wrapfs_ioctl_open(struct inode *inode, struct file *file)
 static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 			      unsigned long arg)
 {
-	struct wrapfs_misc_ioctl wr_ioctl;
+	struct wrapfs_ioctl wr_ioctl;
 	void __user *argp = (void __user *)arg;
 	int err = 0;
 
@@ -208,7 +208,7 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 static ssize_t wrapfs_read_hlist(struct file *file, char __user *buf, size_t
 				 count, loff_t *ppos)
 {
-	struct wrapfs_misc_ioctl wr_ioctl[2];
+	struct wrapfs_ioctl wr_ioctl[2];
 	struct wrapfs_hnode *wh;
 	unsigned int bucket = *ppos, i = 0;
 	unsigned int hashsz = HASH_SIZE(hidden_files_hash);
@@ -228,7 +228,7 @@ again:
 		goto again;
 	else
 		if (copy_to_user(buf, &wr_ioctl,
-				 i * sizeof(struct wrapfs_misc_ioctl)))
+				 i * sizeof(struct wrapfs_ioctl)))
 			return -EFAULT;
 
 	*ppos = bucket;

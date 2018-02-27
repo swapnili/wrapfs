@@ -58,7 +58,7 @@ static int get_inode_number(const char *path, unsigned long *ino)
 }
 
 static int do_ioctl(const char *dev, long cmd,
-		    struct wrapfs_misc_ioctl *wr_ioctl)
+		    struct wrapfs_ioctl *wr_ioctl)
 {
 	int fd, err;
 
@@ -87,7 +87,7 @@ void trim(char *fname)
 
 static int hide_file(char **args)
 {
-	struct wrapfs_misc_ioctl wr_ioctl = {0};
+	struct wrapfs_ioctl wr_ioctl = {0};
 	int err, cmd;
 	char *dev;
 
@@ -106,7 +106,7 @@ static int hide_file(char **args)
 
 static int unhide_file(char **args)
 {
-	struct wrapfs_misc_ioctl wr_ioctl = {0};
+	struct wrapfs_ioctl wr_ioctl = {0};
 	int err, cmd;
 	char *dev;
 
@@ -125,7 +125,7 @@ static int unhide_file(char **args)
 
 static int block_file(char **args)
 {
-	struct wrapfs_misc_ioctl wr_ioctl = {0};
+	struct wrapfs_ioctl wr_ioctl = {0};
 	int err, cmd;
 	char *dev;
 
@@ -144,7 +144,7 @@ static int block_file(char **args)
 
 static int unblock_file(char **args)
 {
-	struct wrapfs_misc_ioctl wr_ioctl = {0};
+	struct wrapfs_ioctl wr_ioctl = {0};
 	char *endp;
 	int err, cmd;
 	char *dev;
@@ -173,7 +173,7 @@ const char *flags_to_str(unsigned int flags)
 
 static int list_all(char **args)
 {
-	struct wrapfs_misc_ioctl wr_ioctl[128] = {0};
+	struct wrapfs_ioctl wr_ioctl[128] = {0};
 	int fd, count = 0, i;
 
 	fd = open(WRAPFS_CDEV, O_RDWR);

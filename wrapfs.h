@@ -42,7 +42,7 @@
 /* useful for tracking code reachability */
 #define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
 
-struct wrapfs_misc_ioctl {
+struct wrapfs_ioctl {
 	unsigned long ino;
 	char path[MAXNAMELEN];
 	unsigned int flags;
