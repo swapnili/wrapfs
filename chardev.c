@@ -8,6 +8,7 @@
 
 #include <linux/hashtable.h>
 #include <linux/list.h>
+#include <linux/vmalloc.h>
 #include <linux/crc32.h>
 #include <linux/string.h>
 #include <asm/uaccess.h>
@@ -208,31 +209,43 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 static ssize_t wrapfs_read_hlist(struct file *file, char __user *buf, size_t
 				 count, loff_t *ppos)
 {
-	struct wrapfs_ioctl wr_ioctl[2];
+	struct wrapfs_ioctl *ioctl_buf;
 	struct wrapfs_hnode *wh;
 	unsigned int bucket = *ppos, i = 0;
 	unsigned int hashsz = HASH_SIZE(hidden_files_hash);
+	int ret;
+
+	ioctl_buf = vmalloc(count);
+	if (!ioctl_buf)
+		return -ENOMEM;
 
 again:
-	if (bucket > hashsz)
-		return -ENOENT;
+	if (bucket > hashsz) {
+		ret = -ENOENT;
+		goto out;
+	}
 
 	hlist_for_each_entry(wh, &hidden_files_hash[bucket], hnode) {
-		strcpy(wr_ioctl[i].path, wh->path);
-		wr_ioctl[i].ino = wh->inode;
-		wr_ioctl[i].flags = wh->flags;
+		strcpy(ioctl_buf[i].path, wh->path);
+		ioctl_buf[i].ino = wh->inode;
+		ioctl_buf[i].flags = wh->flags;
 		i++;
 	}
 	bucket++;
 	if (i == 0)
 		goto again;
 	else
-		if (copy_to_user(buf, &wr_ioctl,
-				 i * sizeof(struct wrapfs_ioctl)))
-			return -EFAULT;
-
+		if (copy_to_user(buf, ioctl_buf,
+				 i * sizeof(struct wrapfs_ioctl))) {
+			ret = -EFAULT;
+			goto out;
+		}
 	*ppos = bucket;
-	return i;
+	ret = i;
+
+out:
+	vfree(ioctl_buf);
+	return ret;
 }
 
 static const struct file_operations wrapfs_ctl_fops = {
