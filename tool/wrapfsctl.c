@@ -160,14 +160,39 @@ static int unblock_file(char **args)
 	return do_ioctl(dev, cmd, &wr_ioctl);
 }
 
+const char *flags_to_str(unsigned int flags)
+{
+	if (flags == WRAPFS_BLOCK)
+		return "blocked";
+	else if (flags == WRAPFS_HIDE)
+		return "hidden";
+	else if (flags & (WRAPFS_BLOCK|WRAPFS_HIDE))
+		return "blocked,hidden";
+	return "";
+}
+
 static int list_all(char **args)
 {
-	struct wrapfs_misc_ioctl wr_ioctl = {0};
-	int err, cmd;
-	char *dev;
+	struct wrapfs_misc_ioctl wr_ioctl[128] = {0};
+	int fd, count = 0, i;
 
-	cmd = WRAPFS_IOC_HIDE_LIST;
-	dev = WRAPFS_CDEV;
+	fd = open(WRAPFS_CDEV, O_RDWR);
+	if (fd < 0) {
+		printf("open failed: %s\n", strerror(-errno));
+		return fd;
+	}
+
+	printf("%-16s%-11s%s\n", "STATE", "INODE_NUM", "FILE");
+	do {
+		count = read(fd, &wr_ioctl, sizeof(wr_ioctl));
+		if (count > 0) {
+			for (i=0; i<count; i++)
+				printf("%-16s%-11lu%s\n",
+				       flags_to_str(wr_ioctl[i].flags),
+				       wr_ioctl[i].ino, wr_ioctl[i].path);
+		}
+	} while (count > 0);
+	close(fd);
 	return 0;
 }
 

@@ -7,6 +7,7 @@
  */
 
 #include <linux/hashtable.h>
+#include <linux/list.h>
 #include <linux/crc32.h>
 #include <linux/string.h>
 #include <asm/uaccess.h>
@@ -197,9 +198,6 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 	case WRAPFS_IOC_UNBLOCK:
 		err = wrapfs_unblock_file(wr_ioctl.path, wr_ioctl.ino);
 		break;
-	case WRAPFS_IOC_HIDE_LIST:
-		printk("WRAPFS_IOC_HIDE_LIST\n");
-		break;
 	default:
 		printk("unknown cmd %x\n", cmd);
 		return -EINVAL;
@@ -207,8 +205,39 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 	return err;
 }
 
+static ssize_t wrapfs_read_hlist(struct file *file, char __user *buf, size_t
+				 count, loff_t *ppos)
+{
+	struct wrapfs_misc_ioctl wr_ioctl[2];
+	struct wrapfs_hnode *wh;
+	unsigned int bucket = *ppos, i = 0;
+	unsigned int hashsz = HASH_SIZE(hidden_files_hash);
+
+again:
+	if (bucket > hashsz)
+		return -ENOENT;
+
+	hlist_for_each_entry(wh, &hidden_files_hash[bucket], hnode) {
+		strcpy(wr_ioctl[i].path, wh->fname);
+		wr_ioctl[i].ino = wh->inode;
+		wr_ioctl[i].flags = wh->flags;
+		i++;
+	}
+	bucket++;
+	if (i == 0)
+		goto again;
+	else
+		if (copy_to_user(buf, &wr_ioctl,
+				 i * sizeof(struct wrapfs_misc_ioctl)))
+			return -EFAULT;
+
+	*ppos = bucket;
+	return i;
+}
+
 static const struct file_operations wrapfs_ctl_fops = {
 	.open = wrapfs_ioctl_open,
+	.read = wrapfs_read_hlist,
 	.unlocked_ioctl = wrapfs_misc_ioctl,
 	.compat_ioctl = wrapfs_misc_ioctl,
 	.owner = THIS_MODULE,
