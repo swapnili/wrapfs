@@ -95,17 +95,24 @@ out:
 	return err;
 }
 
+static int block_file(struct dentry *dentry, void __user *argp)
+{
+	struct wrapfs_ioctl wr_ioctl;
+
+	if (copy_from_user(&wr_ioctl, argp, sizeof(wr_ioctl)))
+		return -EFAULT;
+
+	return wrapfs_block_file(dentry, wr_ioctl.path, wr_ioctl.ino);
+}
+
 static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 				  unsigned long arg)
 {
-	struct dentry *dentry = file_dentry(file);
-	struct inode *inode = file_inode(file);
-	long err = -ENOTTY;
 	struct file *lower_file;
+	long err = -ENOTTY;
 
 	if (cmd == WRAPFS_IOC_BLOCK) {
-		err = wrapfs_block_file(dentry, dentry->d_name.name,
-					inode->i_ino);
+		err = block_file(file_dentry(file), (void __user *)arg);
 		goto out;
 	}
 	lower_file = wrapfs_lower_file(file);
@@ -128,14 +135,11 @@ out:
 static long wrapfs_compat_ioctl(struct file *file, unsigned int cmd,
 				unsigned long arg)
 {
-	struct dentry *dentry = file_dentry(file);
-	struct inode *inode = file_inode(file);
 	long err = -ENOTTY;
 	struct file *lower_file;
 
 	if (cmd == WRAPFS_IOC_BLOCK) {
-		err = wrapfs_block_file(dentry, dentry->d_name.name,
-					inode->i_ino);
+		err = block_file(file_dentry(file), (void __user *)arg);
 		goto out;
 	}
 	lower_file = wrapfs_lower_file(file);

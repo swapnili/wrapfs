@@ -194,10 +194,6 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 	case WRAPFS_IOC_UNHIDE:
 		err = wrapfs_unhide_file(wr_ioctl.path, wr_ioctl.ino);
 		break;
-	case WRAPFS_IOC_BLOCK:
-		err = wrapfs_block_file(file_dentry(file), wr_ioctl.path,
-					wr_ioctl.ino);
-		break;
 	case WRAPFS_IOC_UNBLOCK:
 		err = wrapfs_unblock_file(wr_ioctl.path, wr_ioctl.ino);
 		break;
