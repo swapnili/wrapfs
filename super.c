@@ -27,6 +27,7 @@ static void wrapfs_put_super(struct super_block *sb)
 	if (!spd)
 		return;
 
+	wrapfs_hide_list_deinit(spd);
 	/* decrement lower super references */
 	s = wrapfs_lower_super(sb);
 	wrapfs_set_lower_super(sb, NULL);

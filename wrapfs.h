@@ -29,6 +29,8 @@
 #include <linux/xattr.h>
 #include <linux/exportfs.h>
 #include <linux/miscdevice.h>
+#include <linux/hashtable.h>
+#include <linux/list.h>
 
 #define WRAPFS_SUPER_MAGIC      0xb550ca10
 
@@ -41,6 +43,13 @@
 #define MAXNAMELEN	128
 /* useful for tracking code reachability */
 #define UDBG printk(KERN_DEFAULT "DBG:%s:%s:%d\n", __FILE__, __func__, __LINE__)
+
+/* wrapfs super-block data in memory */
+struct wrapfs_sb_info {
+	struct super_block *lower_sb;
+	DECLARE_HASHTABLE(hlist, 4);
+	spinlock_t hlock;
+};
 
 struct wrapfs_ioctl {
 	unsigned long ino;
@@ -66,11 +75,21 @@ struct wrapfs_hnode {
 #define WRAPFS_HIDE	(1 << 0)
 #define WRAPFS_BLOCK	(1 << 1)
 
-int wrapfs_is_hidden(const char *path, unsigned long ino);
+int wrapfs_hide_file(struct wrapfs_sb_info *sbinfo, const char *path, unsigned
+		     long ino);
+int wrapfs_unhide_file(struct wrapfs_sb_info *sbinfo, const char *path, unsigned
+		     long ino);
 int wrapfs_block_file(struct dentry *dentry, const char *path,
 		      unsigned long ino);
-void wrapfs_remove_hnode(const char *path, unsigned long ino);
-int wrapfs_is_blocked(const char *path, unsigned long inode);
+int wrapfs_unblock_file(struct wrapfs_sb_info *sbinfo, const char *path, unsigned
+		     long ino);
+int wrapfs_is_hidden(struct wrapfs_sb_info *sbinfo, const char *path,
+		     unsigned long ino);
+void wrapfs_remove_hnode(struct wrapfs_sb_info *sbinfo, const char *path,
+			 unsigned long ino);
+int wrapfs_is_blocked(struct wrapfs_sb_info *sbinfo, const char *path,
+		      unsigned long inode);
+void wrapfs_hide_list_deinit(struct wrapfs_sb_info *sbinfo);
 
 /* operations vectors defined in specific files */
 extern const struct file_operations wrapfs_main_fops;
@@ -117,11 +136,6 @@ struct wrapfs_inode_info {
 struct wrapfs_dentry_info {
 	spinlock_t lock;	/* protects lower_path */
 	struct path lower_path;
-};
-
-/* wrapfs super-block data in memory */
-struct wrapfs_sb_info {
-	struct super_block *lower_sb;
 };
 
 /*

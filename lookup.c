@@ -213,6 +213,7 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 	struct path lower_path;
 	struct qstr this;
 	struct dentry *ret_dentry = NULL;
+	struct super_block *sb = dentry->d_sb;
 
 	/* must initialize dentry operations */
 	d_set_d_op(dentry, &wrapfs_dops);
@@ -237,7 +238,8 @@ static struct dentry *__wrapfs_lookup(struct dentry *dentry,
 
 	/* no error: handle positive dentries */
 	if (d_really_is_positive(lower_dentry)) {
-		if (wrapfs_is_blocked(name, d_inode(lower_dentry)->i_ino))
+		if (wrapfs_is_blocked(WRAPFS_SB(sb), name,
+				      d_inode(lower_dentry)->i_ino))
 			goto setup_lower;
 
 		lower_path.mnt = mntget(lower_dir_mnt);

@@ -16,43 +16,55 @@
 
 #define KEY(x)	(crc32(0, (x), strlen(x)))
 
-static DEFINE_HASHTABLE(wrapfs_files_hlist, 4);
-
-static struct wrapfs_hnode *get_hnode(const char *path, unsigned long ino)
+static struct wrapfs_hnode *get_hnode(struct wrapfs_sb_info *sbinfo,
+				      const char *path, unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
 	const char *basename = kbasename(path);
 	unsigned key = KEY(basename);
 
-	hash_for_each_possible(wrapfs_files_hlist, wh, hnode, key) {
+	hash_for_each_possible(sbinfo->hlist, wh, hnode, key) {
 		if (wh->inode == ino)
 			return wh;
 	}
 	return NULL;
 }
 
-int wrapfs_is_hidden(const char *path, unsigned long inode)
+int wrapfs_is_hidden(struct wrapfs_sb_info *sbinfo, const char *path,
+		     unsigned long inode)
 {
 	struct wrapfs_hnode *wh;
+	int hidden = 0;
 
-	wh = get_hnode(path, inode);
+	spin_lock(&sbinfo->hlock);
+	wh = get_hnode(sbinfo, path, inode);
 	if (!wh)
-		return 0;
-	return wh->flags & WRAPFS_HIDE ? 1 : 0;
+		goto out;
+	hidden = wh->flags & WRAPFS_HIDE ? 1 : 0;
+
+out:
+	spin_unlock(&sbinfo->hlock);
+	return hidden;
 }
 
-int wrapfs_is_blocked(const char *path, unsigned long inode)
+int wrapfs_is_blocked(struct wrapfs_sb_info *sbinfo, const char *path,
+		      unsigned long inode)
 {
 	struct wrapfs_hnode *wh;
+	int blocked = 0;
 
-	wh = get_hnode(path, inode);
+	spin_lock(&sbinfo->hlock);
+	wh = get_hnode(sbinfo, path, inode);
 	if (!wh)
-		return 0;
-	return wh->flags & WRAPFS_BLOCK ? 1 : 0;
+		goto out;
+	blocked = wh->flags & WRAPFS_BLOCK ? 1 : 0;
+
+out:
+	spin_unlock(&sbinfo->hlock);
+	return blocked;
 }
 
-static struct wrapfs_hnode *alloc_hnode(const char *path,
-					       unsigned long ino)
+static struct wrapfs_hnode *alloc_hnode(const char *path, unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
 
@@ -69,23 +81,30 @@ static struct wrapfs_hnode *alloc_hnode(const char *path,
 	return wh;
 }
 
-int wrapfs_hide_file(const char *path, unsigned long inode)
+int wrapfs_hide_file(struct wrapfs_sb_info *sbinfo, const char *path,
+		     unsigned long inode)
 {
 	struct wrapfs_hnode *wh;
 	const char *basename = kbasename(path);
 	unsigned key = KEY(basename);
+	int err = 0;
 
-	wh = get_hnode(path, inode);
+	spin_lock(&sbinfo->hlock);
+	wh = get_hnode(sbinfo, path, inode);
 	if (!wh) {
 		wh = alloc_hnode(path, inode);
-		if (!wh)
-			return -ENOMEM;
-		hash_add(wrapfs_files_hlist, &wh->hnode, key);
+		if (!wh) {
+			err = -ENOMEM;
+			goto out;
+		}
+		hash_add(sbinfo->hlist, &wh->hnode, key);
 	}
-
 	wh->flags |= WRAPFS_HIDE;
 	printk("hide %s:%lu\n", path, inode);
-	return 0;
+
+out:
+	spin_unlock(&sbinfo->hlock);
+	return err;
 }
 
 static void free_hnode(struct wrapfs_hnode *wh)
@@ -94,80 +113,106 @@ static void free_hnode(struct wrapfs_hnode *wh)
 	kfree(wh);
 }
 
-int wrapfs_unhide_file(const char *path, unsigned long ino)
+int wrapfs_unhide_file(struct wrapfs_sb_info *sbinfo, const char *path,
+		       unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
+	int err = 0;
 
-	wh = get_hnode(path, ino);
-	if (!wh)
-		return -ENOENT;
-
+	spin_lock(&sbinfo->hlock);
+	wh = get_hnode(sbinfo, path, ino);
+	if (!wh) {
+		err = -ENOENT;
+		goto out;
+	}
 	wh->flags &= ~WRAPFS_HIDE;
 	printk("unhide %s:%lu\n", path, ino);
-	return 0;
+
+out:
+	spin_unlock(&sbinfo->hlock);
+	return err;
 }
 
 int wrapfs_block_file(struct dentry *dentry, const char *path,
 		      unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
+	struct wrapfs_sb_info *sbinfo = WRAPFS_SB(dentry->d_sb);
 	struct path lower_path;
 	const char *basename = kbasename(path);
 	unsigned key = KEY(basename);
+	int err = 0;
 
-	/* TODO: dont assume dentry priv data exists */
 	wrapfs_get_lower_path(dentry, &lower_path);
-	wh = get_hnode(path, ino);
+	spin_lock(&sbinfo->hlock);
+
+	wh = get_hnode(sbinfo, path, ino);
 	if (!wh) {
 		wh = alloc_hnode(path, ino);
-		if (!wh)
-			return -ENOMEM;
-		hash_add(wrapfs_files_hlist, &wh->hnode, key);
+		if (!wh) {
+			err = -ENOMEM;
+			goto out;
+		}
+		hash_add(sbinfo->hlist, &wh->hnode, key);
 	}
 
 	wh->flags |= WRAPFS_BLOCK;
-
 	/* unhash dentry */
 	d_drop(dentry);
-	wrapfs_put_lower_path(dentry, &lower_path);
 	printk("block %s:%lu\n", path, ino);
-	return 0;
+
+out:
+	spin_unlock(&sbinfo->hlock);
+	wrapfs_put_lower_path(dentry, &lower_path);
+	return err;
 }
 
-int wrapfs_unblock_file(const char *path, unsigned long ino)
+int wrapfs_unblock_file(struct wrapfs_sb_info *sbinfo, const char *path,
+			unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
+	int err = 0;
 
-	wh = get_hnode(path, ino);
-	if (!wh)
-		return -ENOENT;
-
+	spin_lock(&sbinfo->hlock);
+	wh = get_hnode(sbinfo, path, ino);
+	if (!wh) {
+		err = -ENOENT;
+		goto out;
+	}
 	wh->flags &= ~WRAPFS_BLOCK;
 	printk("unblock %s:%lu\n", path, ino);
+
+out:
+	spin_unlock(&sbinfo->hlock);
 	return 0;
 }
 
-void wrapfs_remove_hnode(const char *path, unsigned long ino)
+void wrapfs_remove_hnode(struct wrapfs_sb_info *sbinfo, const char *path,
+			 unsigned long ino)
 {
 	struct wrapfs_hnode *wh;
 
-	wh = get_hnode(path, ino);
+	spin_lock(&sbinfo->hlock);
+	wh = get_hnode(sbinfo, path, ino);
 	if (wh) {
 		hash_del(&wh->hnode);
 		free_hnode(wh);
 	}
+	spin_unlock(&sbinfo->hlock);
 }
 
-static void wrapfs_hide_list_deinit(void)
+void wrapfs_hide_list_deinit(struct wrapfs_sb_info *sbinfo)
 {
 	struct wrapfs_hnode *wh;
 	struct hlist_node *tmp;
 	int i;
 
-	hash_for_each_safe(wrapfs_files_hlist, i, tmp, wh, hnode) {
+	spin_lock(&sbinfo->hlock);
+	hash_for_each_safe(sbinfo->hlist, i, tmp, wh, hnode) {
 		hash_del(&wh->hnode);
 		free_hnode(wh);
 	}
+	spin_unlock(&sbinfo->hlock);
 }
 
 static int wrapfs_ioctl_open(struct inode *inode, struct file *file)
@@ -181,6 +226,7 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 			      unsigned long arg)
 {
 	struct wrapfs_ioctl wr_ioctl;
+	struct dentry *dentry = file_dentry(file);
 	void __user *argp = (void __user *)arg;
 	int err = 0;
 
@@ -188,14 +234,9 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 		return -EFAULT;
 
 	switch (cmd) {
-	case WRAPFS_IOC_HIDE:
-		err = wrapfs_hide_file(wr_ioctl.path, wr_ioctl.ino);
-		break;
-	case WRAPFS_IOC_UNHIDE:
-		err = wrapfs_unhide_file(wr_ioctl.path, wr_ioctl.ino);
-		break;
 	case WRAPFS_IOC_UNBLOCK:
-		err = wrapfs_unblock_file(wr_ioctl.path, wr_ioctl.ino);
+		err = wrapfs_unblock_file(WRAPFS_SB(dentry->d_sb), wr_ioctl.path,
+					  wr_ioctl.ino);
 		break;
 	default:
 		printk("unknown cmd 0x%x\n", cmd);
@@ -207,6 +248,7 @@ static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
 static ssize_t wrapfs_read_hlist(struct file *file, char __user *buf, size_t
 				 count, loff_t *ppos)
 {
+#if 0
 	struct wrapfs_ioctl *ioctl_buf;
 	struct wrapfs_hnode *wh;
 	unsigned int bucket = *ppos, i = 0;
@@ -244,6 +286,8 @@ again:
 out:
 	vfree(ioctl_buf);
 	return ret;
+#endif
+	return 0;
 }
 
 static const struct file_operations wrapfs_ctl_fops = {
@@ -268,5 +312,4 @@ int wrapfs_ioctl_init(void)
 void wrapfs_ioctl_exit(void)
 {
 	misc_deregister(&wrapfs_misc);
-	wrapfs_hide_list_deinit();
 }

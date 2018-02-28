@@ -49,6 +49,10 @@ static int wrapfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto out_free;
 	}
 
+	/* initialize internal hash list */
+	hash_init(WRAPFS_SB(sb)->hlist);
+	spin_lock_init(&WRAPFS_SB(sb)->hlock);
+
 	/* set the lower superblock field of upper superblock */
 	lower_sb = lower_path.dentry->d_sb;
 	atomic_inc(&lower_sb->s_active);

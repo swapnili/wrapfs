@@ -18,12 +18,13 @@ static int wrapfs_create(struct inode *dir, struct dentry *dentry,
 	int err;
 	struct dentry *lower_dentry;
 	struct dentry *lower_parent_dentry = NULL;
+	struct super_block *sb = dir->i_sb;
 	struct path lower_path;
 
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
 	lower_parent_dentry = lock_parent(lower_dentry);
-	if (wrapfs_is_blocked(lower_dentry->d_name.name,
+	if (wrapfs_is_blocked(WRAPFS_SB(sb), lower_dentry->d_name.name,
 			      d_inode(lower_dentry)->i_ino)) {
 		err = -EPERM;
 		goto out;
@@ -88,6 +89,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 	struct inode *lower_dir_inode = wrapfs_lower_inode(dir);
 	struct dentry *lower_dir_dentry;
 	struct path lower_path;
+	struct super_block *sb = dentry->d_sb;
 
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
@@ -113,7 +115,8 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		  wrapfs_lower_inode(d_inode(dentry))->i_nlink);
 	d_inode(dentry)->i_ctime = dir->i_ctime;
 	d_drop(dentry); /* this is needed, else LTP fails (VFS won't do it) */
-	wrapfs_remove_hnode(dentry->d_name.name, dentry->d_inode->i_ino);
+	wrapfs_remove_hnode(WRAPFS_SB(sb), dentry->d_name.name,
+			    dentry->d_inode->i_ino);
 out:
 	unlock_dir(lower_dir_dentry);
 	dput(lower_dentry);

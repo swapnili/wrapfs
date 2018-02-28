@@ -53,6 +53,7 @@ static ssize_t wrapfs_write(struct file *file, const char __user *buf,
 struct wrapfs_dir_context {
 	struct dir_context wrapfs_ctx;
 	struct dir_context *caller_ctx;
+	struct dentry *dentry;
 };
 
 static int wrapfs_filldir(struct dir_context *ctx, const char *lower_name, int
@@ -62,10 +63,11 @@ static int wrapfs_filldir(struct dir_context *ctx, const char *lower_name, int
 	struct wrapfs_dir_context *buf = container_of(ctx, struct
 						      wrapfs_dir_context,
 						      wrapfs_ctx);
+	struct super_block *sb = buf->dentry->d_sb;
 	int err = 0;
 
 	buf->caller_ctx->pos = buf->wrapfs_ctx.pos;
-	if (wrapfs_is_hidden(lower_name, ino) == 0) {
+	if (wrapfs_is_hidden(WRAPFS_SB(sb), lower_name, ino) == 0) {
 		err = !dir_emit(buf->caller_ctx, lower_name, lower_namelen, ino,
 				d_type);
 	}
@@ -80,6 +82,7 @@ static int wrapfs_readdir(struct file *file, struct dir_context *ctx)
 	struct wrapfs_dir_context buf = {
 		.wrapfs_ctx.actor = wrapfs_filldir,
 		.caller_ctx = ctx,
+		.dentry = file_dentry(file),
 	};
 
 	lower_file = wrapfs_lower_file(file);
@@ -95,14 +98,50 @@ out:
 	return err;
 }
 
-static int block_file(struct dentry *dentry, void __user *argp)
+static int known_cmd(unsigned int cmd)
+{
+	switch (cmd) {
+	case WRAPFS_IOC_HIDE:
+	case WRAPFS_IOC_UNHIDE:
+	case WRAPFS_IOC_BLOCK:
+	case WRAPFS_IOC_UNBLOCK:
+		return 1;
+	}
+	return 0;
+}
+
+static int wrapfs_handle_ioctl(struct file *file, unsigned int cmd,
+			      unsigned long arg)
 {
 	struct wrapfs_ioctl wr_ioctl;
+	struct dentry *dentry = file_dentry(file);
+	void __user *argp = (void __user *)arg;
+	int err = 0;
 
 	if (copy_from_user(&wr_ioctl, argp, sizeof(wr_ioctl)))
 		return -EFAULT;
 
-	return wrapfs_block_file(dentry, wr_ioctl.path, wr_ioctl.ino);
+	switch (cmd) {
+	case WRAPFS_IOC_HIDE:
+		err = wrapfs_hide_file(WRAPFS_SB(dentry->d_sb), wr_ioctl.path,
+				       wr_ioctl.ino);
+		break;
+	case WRAPFS_IOC_UNHIDE:
+		err = wrapfs_unhide_file(WRAPFS_SB(dentry->d_sb), wr_ioctl.path,
+					 wr_ioctl.ino);
+		break;
+	case WRAPFS_IOC_BLOCK:
+		err = wrapfs_block_file(dentry, wr_ioctl.path, wr_ioctl.ino);
+		break;
+	case WRAPFS_IOC_UNBLOCK:
+		err = wrapfs_unblock_file(WRAPFS_SB(dentry->d_sb),
+					  wr_ioctl.path, wr_ioctl.ino);
+		break;
+	default:
+		printk("unknown cmd 0x%x\n", cmd);
+		return -EINVAL;
+	}
+	return err;
 }
 
 static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
@@ -111,8 +150,8 @@ static long wrapfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 	struct file *lower_file;
 	long err = -ENOTTY;
 
-	if (cmd == WRAPFS_IOC_BLOCK) {
-		err = block_file(file_dentry(file), (void __user *)arg);
+	if (known_cmd(cmd)) {
+		err = wrapfs_handle_ioctl(file, cmd, arg);
 		goto out;
 	}
 	lower_file = wrapfs_lower_file(file);
@@ -138,8 +177,8 @@ static long wrapfs_compat_ioctl(struct file *file, unsigned int cmd,
 	long err = -ENOTTY;
 	struct file *lower_file;
 
-	if (cmd == WRAPFS_IOC_BLOCK) {
-		err = block_file(file_dentry(file), (void __user *)arg);
+	if (known_cmd(cmd)) {
+		err = wrapfs_handle_ioctl(file, cmd, arg);
 		goto out;
 	}
 	lower_file = wrapfs_lower_file(file);
