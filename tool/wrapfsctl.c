@@ -29,7 +29,7 @@ struct cmd_opts {
 	{"hide",	hide_file,	"hide     <path>"},
 	{"unhide",	unhide_file,	"unhide   <path>"},
 	{"block",	block_file,	"block    <path>"},
-	{"unblock",	unblock_file,	"unblock  <path> <inode_number>"},
+	{"unblock",	unblock_file,	"unblock  <path> <inode_number> <mntpt>"},
 	{"list",	list_all,	"list"},
 	{"help",	help,		"help"},
 };
@@ -62,15 +62,15 @@ static int do_ioctl(const char *dev, long cmd,
 {
 	int fd, err;
 
-	fd = open(dev, O_RDWR);
+	fd = open(dev, O_RDONLY);
 	if (fd < 0) {
-		printf("open failed: %s\n", strerror(errno));
+		printf("open failed(%s): %s\n", strerror(errno), dev);
 		return fd;
 	}
 
 	err = ioctl(fd, cmd, wr_ioctl);
 	if (err)
-		printf("ioctl failed: %s\n", strerror(errno));
+		printf("ioctl failed(%s): %s\n", strerror(errno), dev);
 
 	close(fd);
 	return err;
@@ -105,7 +105,7 @@ static int hide_file(char **args, int argc)
 		return err;
 
 	cmd = WRAPFS_IOC_HIDE;
-	dev = WRAPFS_CDEV;
+	dev = wr_ioctl.path;
 
 	err = do_ioctl(dev, cmd, &wr_ioctl);
 	if (!err)
@@ -133,7 +133,7 @@ static int unhide_file(char **args, int argc)
 		return err;
 
 	cmd = WRAPFS_IOC_UNHIDE;
-	dev = WRAPFS_CDEV;
+	dev = wr_ioctl.path;
 
 	err = do_ioctl(dev, cmd, &wr_ioctl);
 	if (!err)
@@ -176,7 +176,7 @@ static int unblock_file(char **args, int argc)
 	int err, cmd;
 	char *dev;
 
-	if (argc < 2) {
+	if (argc < 3) {
 		printf("Not enough agruments\n");
 		usage();
 		return -EINVAL;
@@ -187,7 +187,7 @@ static int unblock_file(char **args, int argc)
 	wr_ioctl.ino = strtoul(args[1], &endp, 10);
 
 	cmd = WRAPFS_IOC_UNBLOCK;
-	dev = WRAPFS_CDEV;
+	dev = args[2];
 
 	err = do_ioctl(dev, cmd, &wr_ioctl);
 	if (!err)
