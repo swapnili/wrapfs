@@ -18,7 +18,7 @@ static int hide_file(char **args, int argc);
 static int unhide_file(char **args, int argc);
 static int block_file(char **args, int argc);
 static int unblock_file(char **args, int argc);
-static int list_all(char **args, int argc);
+static int list(char **args, int argc);
 static int help(char **args, int argc);
 
 struct cmd_opts {
@@ -30,7 +30,7 @@ struct cmd_opts {
 	{"unhide",	unhide_file,	"unhide   <path>"},
 	{"block",	block_file,	"block    <path>"},
 	{"unblock",	unblock_file,	"unblock  <path> <inode_number> <mntpt>"},
-	{"list",	list_all,	"list"},
+	{"list",	list,		"list     <mntpt>"},
 	{"help",	help,		"help"},
 };
 
@@ -206,35 +206,75 @@ const char *flags_to_str(unsigned int flags)
 	return "";
 }
 
-static int list_all(char **args, int argc)
+static int get_list_size(const char *mntpt, unsigned long *list_sz)
 {
-	struct wrapfs_ioctl wr_ioctl[128] = {0};
-	int fd, count = 0, i;
+	int fd, ret;
 
-	if (argc) {
+	fd = open(mntpt, O_RDONLY);
+	if (fd < 0) {
+		printf("open(%s) failed: %s\n", mntpt, strerror(errno));
+		return fd;
+	}
+	ret = ioctl(fd, WRAPFS_IOC_GET_LIST_SIZE, list_sz);
+	if (ret < 0)
+		printf("ioctl(%s) failed: %s\n", mntpt, strerror(errno));
+
+	close(fd);
+	return ret;
+}
+
+static int get_list(const char *mntpt, struct wrapfs_list_ioctl *list_ioctl)
+{
+	int fd, ret;
+
+	if (!list_ioctl->size)
+		return 0;
+
+	fd = open(mntpt, O_RDONLY);
+	if (fd < 0) {
+		printf("open(%s) failed: %s\n", mntpt, strerror(errno));
+		return fd;
+	}
+	ret = ioctl(fd, WRAPFS_IOC_GET_LIST, list_ioctl);
+	if (ret < 0)
+		printf("ioctl(%s) failed: %s\n", mntpt, strerror(errno));
+	close(fd);
+	return ret;
+}
+
+static int list(char **args, int argc)
+{
+	struct wrapfs_list_ioctl list_ioctl;
+	struct wrapfs_ioctl *wr_ioctl;
+	int fd, ret = 0, i;
+	unsigned long list_sz = 0;
+
+	if  (argc < 1) {
 		printf("Not enough agruments\n");
 		usage();
 		return -EINVAL;
 	}
 
-	fd = open(WRAPFS_CDEV, O_RDWR);
-	if (fd < 0) {
-		printf("open failed: %s\n", strerror(-errno));
-		return fd;
-	}
+	if (get_list_size(args[0], &list_sz))
+		return -EINVAL;
 
+	wr_ioctl = calloc(sizeof(struct wrapfs_ioctl), list_sz);
+	if (!wr_ioctl)
+		return -ENOMEM;
+
+	list_ioctl.list = wr_ioctl;
+	list_ioctl.size = list_sz;
+	ret = get_list(args[0], &list_ioctl);
+	if (ret)
+		goto out;
 	printf("%-16s%-11s%s\n", "STATE", "INODE_NUM", "FILE");
-	do {
-		count = read(fd, &wr_ioctl, sizeof(wr_ioctl));
-		if (count > 0) {
-			for (i=0; i<count; i++)
-				printf("%-16s%-11lu%s\n",
-				       flags_to_str(wr_ioctl[i].flags),
-				       wr_ioctl[i].ino, wr_ioctl[i].path);
-		}
-	} while (count > 0);
-	close(fd);
-	return 0;
+	for (i=0; i<list_sz; i++)
+		printf("%-16s%-11lu%s\n", flags_to_str(wr_ioctl[i].flags),
+		       wr_ioctl[i].ino, wr_ioctl[i].path);
+
+out:
+	free(wr_ioctl);
+	return ret;
 }
 
 static int help(char **args, int argc)
