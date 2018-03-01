@@ -155,17 +155,11 @@ static int __init init_wrapfs_fs(void)
 	err = wrapfs_init_dentry_cache();
 	if (err)
 		goto out;
-	err = wrapfs_ioctl_init();
-	if (err)
-		goto out;
-
 	err = register_filesystem(&wrapfs_fs_type);
 	if (err)
-		goto unreg_ioctl;
+		goto out;
 	return err;
 
-unreg_ioctl:
-	wrapfs_ioctl_exit();
 out:
 	wrapfs_destroy_inode_cache();
 	wrapfs_destroy_dentry_cache();
@@ -176,7 +170,6 @@ static void __exit exit_wrapfs_fs(void)
 {
 	wrapfs_destroy_inode_cache();
 	wrapfs_destroy_dentry_cache();
-	wrapfs_ioctl_exit();
 	unregister_filesystem(&wrapfs_fs_type);
 	pr_info("Completed wrapfs module unload\n");
 }

@@ -105,6 +105,8 @@ static int known_cmd(unsigned int cmd)
 	case WRAPFS_IOC_UNHIDE:
 	case WRAPFS_IOC_BLOCK:
 	case WRAPFS_IOC_UNBLOCK:
+	case WRAPFS_IOC_GET_LIST_SIZE:
+	case WRAPFS_IOC_GET_LIST:
 		return 1;
 	}
 	return 0;
@@ -117,6 +119,7 @@ static int wrapfs_handle_ioctl(struct file *file, unsigned int cmd,
 	struct dentry *dentry = file_dentry(file);
 	void __user *argp = (void __user *)arg;
 	int err = 0;
+	unsigned long list_sz;
 
 	if (copy_from_user(&wr_ioctl, argp, sizeof(wr_ioctl)))
 		return -EFAULT;
@@ -136,6 +139,14 @@ static int wrapfs_handle_ioctl(struct file *file, unsigned int cmd,
 	case WRAPFS_IOC_UNBLOCK:
 		err = wrapfs_unblock_file(WRAPFS_SB(dentry->d_sb),
 					  wr_ioctl.path, wr_ioctl.ino);
+		break;
+	case WRAPFS_IOC_GET_LIST_SIZE:
+		list_sz = wrapfs_get_list_size(WRAPFS_SB(dentry->d_sb));
+		if (copy_to_user(argp, &list_sz, sizeof(list_sz)))
+			err = -EFAULT;
+		break;
+	case WRAPFS_IOC_GET_LIST:
+		err = wrapfs_get_list(WRAPFS_SB(dentry->d_sb), argp);
 		break;
 	default:
 		printk("unknown cmd 0x%x\n", cmd);

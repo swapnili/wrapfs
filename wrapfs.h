@@ -28,7 +28,6 @@
 #include <linux/sched.h>
 #include <linux/xattr.h>
 #include <linux/exportfs.h>
-#include <linux/miscdevice.h>
 #include <linux/hashtable.h>
 #include <linux/list.h>
 
@@ -57,6 +56,11 @@ struct wrapfs_ioctl {
 	unsigned int flags;
 };
 
+struct wrapfs_list_ioctl {
+	struct wrapfs_ioctl *list;
+	unsigned long size;
+};
+
 struct wrapfs_hnode {
 	struct hlist_node hnode;
 	char *path;
@@ -65,11 +69,12 @@ struct wrapfs_hnode {
 };
 
 /* miscellaneous ioctls */
-#define WRAPFS_IOC_HIDE		_IO('h', 1)
-#define WRAPFS_IOC_UNHIDE	_IO('h', 2)
-#define WRAPFS_IOC_BLOCK	_IO('h', 3)
-#define WRAPFS_IOC_UNBLOCK	_IO('h', 4)
-#define WRAPFS_IOC_HIDE_LIST	_IO('h', 5)
+#define WRAPFS_IOC_HIDE			_IO('h', 1)
+#define WRAPFS_IOC_UNHIDE		_IO('h', 2)
+#define WRAPFS_IOC_BLOCK		_IO('h', 3)
+#define WRAPFS_IOC_UNBLOCK		_IO('h', 4)
+#define WRAPFS_IOC_GET_LIST_SIZE	_IO('h', 5)
+#define WRAPFS_IOC_GET_LIST		_IO('h', 6)
 
 /* flags */
 #define WRAPFS_HIDE	(1 << 0)
@@ -90,6 +95,8 @@ void wrapfs_remove_hnode(struct wrapfs_sb_info *sbinfo, const char *path,
 int wrapfs_is_blocked(struct wrapfs_sb_info *sbinfo, const char *path,
 		      unsigned long inode);
 void wrapfs_hide_list_deinit(struct wrapfs_sb_info *sbinfo);
+unsigned long wrapfs_get_list_size(struct wrapfs_sb_info *sbinfo);
+int wrapfs_get_list(struct wrapfs_sb_info *sbinfo, void __user *buf);
 
 /* operations vectors defined in specific files */
 extern const struct file_operations wrapfs_main_fops;
@@ -116,9 +123,6 @@ extern struct inode *wrapfs_iget(struct super_block *sb,
 				 struct inode *lower_inode);
 extern int wrapfs_interpose(struct dentry *dentry, struct super_block *sb,
 			    struct path *lower_path);
-
-extern int wrapfs_ioctl_init(void);
-extern void wrapfs_ioctl_exit(void);
 
 /* file private data */
 struct wrapfs_file_info {

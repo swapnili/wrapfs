@@ -215,101 +215,55 @@ void wrapfs_hide_list_deinit(struct wrapfs_sb_info *sbinfo)
 	spin_unlock(&sbinfo->hlock);
 }
 
-static int wrapfs_ioctl_open(struct inode *inode, struct file *file)
+unsigned long wrapfs_get_list_size(struct wrapfs_sb_info *sbinfo)
 {
-	file->private_data = NULL;
+	struct wrapfs_hnode *wh;
+	unsigned long list_sz = 0;
+	int i;
 
-	return 0;
+	spin_lock(&sbinfo->hlock);
+	hash_for_each(sbinfo->hlist, i, wh, hnode)
+		list_sz++;
+	spin_unlock(&sbinfo->hlock);
+	return list_sz;
 }
 
-static long wrapfs_misc_ioctl(struct file *file, unsigned int cmd,
-			      unsigned long arg)
+int wrapfs_copy_hlist(struct wrapfs_sb_info *sbinfo,
+		      struct wrapfs_ioctl __user *buf, unsigned long size)
 {
-	struct wrapfs_ioctl wr_ioctl;
-	struct dentry *dentry = file_dentry(file);
-	void __user *argp = (void __user *)arg;
-	int err = 0;
-
-	if (copy_from_user(&wr_ioctl, argp, sizeof(wr_ioctl)))
-		return -EFAULT;
-
-	switch (cmd) {
-	case WRAPFS_IOC_UNBLOCK:
-		err = wrapfs_unblock_file(WRAPFS_SB(dentry->d_sb), wr_ioctl.path,
-					  wr_ioctl.ino);
-		break;
-	default:
-		printk("unknown cmd 0x%x\n", cmd);
-		return -EINVAL;
-	}
-	return err;
-}
-
-static ssize_t wrapfs_read_hlist(struct file *file, char __user *buf, size_t
-				 count, loff_t *ppos)
-{
-#if 0
 	struct wrapfs_ioctl *ioctl_buf;
 	struct wrapfs_hnode *wh;
-	unsigned int bucket = *ppos, i = 0;
-	unsigned int hashsz = HASH_SIZE(wrapfs_files_hlist);
-	int ret;
+	unsigned int bkt, i = 0;
+	int ret = 0;
 
-	ioctl_buf = vmalloc(count);
+	if (size == 0)
+		return -EINVAL;
+
+	ioctl_buf = vmalloc(size * sizeof(struct wrapfs_ioctl));
 	if (!ioctl_buf)
 		return -ENOMEM;
 
-again:
-	if (bucket > hashsz) {
-		ret = -ENOENT;
-		goto out;
-	}
-
-	hlist_for_each_entry(wh, &wrapfs_files_hlist[bucket], hnode) {
+	hash_for_each(sbinfo->hlist, bkt, wh, hnode) {
 		strcpy(ioctl_buf[i].path, wh->path);
 		ioctl_buf[i].ino = wh->inode;
 		ioctl_buf[i].flags = wh->flags;
-		i++;
-	}
-	bucket++;
-	if (i == 0)
-		goto again;
-	else
-		if (copy_to_user(buf, ioctl_buf,
-				 i * sizeof(struct wrapfs_ioctl))) {
-			ret = -EFAULT;
+		if (++i > size)
 			goto out;
-		}
-	*ppos = bucket;
-	ret = i;
+	}
 
 out:
+	if (copy_to_user(buf, ioctl_buf, size * sizeof(struct wrapfs_ioctl)))
+		ret = -EFAULT;
+
 	vfree(ioctl_buf);
 	return ret;
-#endif
-	return 0;
 }
 
-static const struct file_operations wrapfs_ctl_fops = {
-	.open = wrapfs_ioctl_open,
-	.read = wrapfs_read_hlist,
-	.unlocked_ioctl = wrapfs_misc_ioctl,
-	.compat_ioctl = wrapfs_misc_ioctl,
-	.owner = THIS_MODULE,
-};
-
-static struct miscdevice wrapfs_misc = {
-	.minor = MISC_DYNAMIC_MINOR,
-	.name  = "wrapfs",
-	.fops  = &wrapfs_ctl_fops
-};
-
-int wrapfs_ioctl_init(void)
+int wrapfs_get_list(struct wrapfs_sb_info *sbinfo, void __user *buf)
 {
-	return misc_register(&wrapfs_misc);
-}
+	struct wrapfs_list_ioctl list_ioctl;
 
-void wrapfs_ioctl_exit(void)
-{
-	misc_deregister(&wrapfs_misc);
+	if (copy_from_user(&list_ioctl, buf, sizeof(list_ioctl)))
+		return -EFAULT;
+	return wrapfs_copy_hlist(sbinfo, list_ioctl.list, list_ioctl.size);
 }
