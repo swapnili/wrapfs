@@ -53,7 +53,7 @@ static ssize_t wrapfs_write(struct file *file, const char __user *buf,
 struct wrapfs_dir_context {
 	struct dir_context wrapfs_ctx;
 	struct dir_context *caller_ctx;
-	struct dentry *dentry;
+	struct super_block *sb;
 };
 
 static int wrapfs_filldir(struct dir_context *ctx, const char *lower_name, int
@@ -63,11 +63,10 @@ static int wrapfs_filldir(struct dir_context *ctx, const char *lower_name, int
 	struct wrapfs_dir_context *buf = container_of(ctx, struct
 						      wrapfs_dir_context,
 						      wrapfs_ctx);
-	struct super_block *sb = buf->dentry->d_sb;
 	int err = 0;
 
 	buf->caller_ctx->pos = buf->wrapfs_ctx.pos;
-	if (wrapfs_is_hidden(WRAPFS_SB(sb), lower_name, ino) == 0) {
+	if (wrapfs_is_hidden(WRAPFS_SB(buf->sb), lower_name, ino) == 0) {
 		err = !dir_emit(buf->caller_ctx, lower_name, lower_namelen, ino,
 				d_type);
 	}
@@ -78,11 +77,11 @@ static int wrapfs_readdir(struct file *file, struct dir_context *ctx)
 {
 	int err;
 	struct file *lower_file = NULL;
-	struct dentry *dentry = file->f_path.dentry;
+	struct dentry *dentry = file_dentry(file);
 	struct wrapfs_dir_context buf = {
 		.wrapfs_ctx.actor = wrapfs_filldir,
 		.caller_ctx = ctx,
-		.dentry = file_dentry(file),
+		.sb = dentry->d_sb,
 	};
 
 	lower_file = wrapfs_lower_file(file);

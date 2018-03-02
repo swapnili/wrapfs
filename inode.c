@@ -18,17 +18,20 @@ static int wrapfs_create(struct inode *dir, struct dentry *dentry,
 	int err;
 	struct dentry *lower_dentry;
 	struct dentry *lower_parent_dentry = NULL;
-	struct super_block *sb = dir->i_sb;
+	struct super_block *sb = dentry->d_sb;
 	struct path lower_path;
 
 	wrapfs_get_lower_path(dentry, &lower_path);
 	lower_dentry = lower_path.dentry;
 	lower_parent_dentry = lock_parent(lower_dentry);
-	if (wrapfs_is_blocked(WRAPFS_SB(sb), lower_dentry->d_name.name,
-			      d_inode(lower_dentry)->i_ino)) {
-		err = -EPERM;
-		goto out;
+	if (d_really_is_positive(lower_dentry)) {
+	    if (wrapfs_is_blocked(WRAPFS_SB(sb) , lower_dentry->d_name.name,
+				  d_inode(lower_dentry)->i_ino)) {
+			err = -EPERM;
+			goto out;
+	    }
 	}
+
 	err = vfs_create(d_inode(lower_parent_dentry), lower_dentry, mode,
 			 want_excl);
 	if (err)
@@ -111,8 +114,7 @@ static int wrapfs_unlink(struct inode *dir, struct dentry *dentry)
 		goto out;
 	fsstack_copy_attr_times(dir, lower_dir_inode);
 	fsstack_copy_inode_size(dir, lower_dir_inode);
-	set_nlink(d_inode(dentry),
-		  wrapfs_lower_inode(d_inode(dentry))->i_nlink);
+	set_nlink(d_inode(dentry), wrapfs_lower_inode(d_inode(dentry))->i_nlink);
 	d_inode(dentry)->i_ctime = dir->i_ctime;
 	d_drop(dentry); /* this is needed, else LTP fails (VFS won't do it) */
 	wrapfs_remove_hnode(WRAPFS_SB(sb), dentry->d_name.name,
