@@ -117,7 +117,7 @@ static int wrapfs_handle_ioctl(struct file *file, unsigned int cmd,
 	struct wrapfs_ioctl wr_ioctl;
 	struct dentry *dentry = file_dentry(file);
 	void __user *argp = (void __user *)arg;
-	int err = 0;
+	int err = -EINVAL;
 	unsigned long list_sz;
 
 	if (copy_from_user(&wr_ioctl, argp, sizeof(wr_ioctl)))
@@ -125,14 +125,20 @@ static int wrapfs_handle_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case WRAPFS_IOC_HIDE:
+		if (IS_ROOT(dentry))
+			goto out;
 		err = wrapfs_hide_file(WRAPFS_SB(dentry->d_sb), wr_ioctl.path,
 				       wr_ioctl.ino);
 		break;
 	case WRAPFS_IOC_UNHIDE:
+		if (IS_ROOT(dentry))
+			goto out;
 		err = wrapfs_unhide_file(WRAPFS_SB(dentry->d_sb), wr_ioctl.path,
 					 wr_ioctl.ino);
 		break;
 	case WRAPFS_IOC_BLOCK:
+		if (IS_ROOT(dentry))
+			goto out;
 		err = wrapfs_block_file(dentry, wr_ioctl.path, wr_ioctl.ino);
 		break;
 	case WRAPFS_IOC_UNBLOCK:
@@ -140,6 +146,7 @@ static int wrapfs_handle_ioctl(struct file *file, unsigned int cmd,
 					  wr_ioctl.path, wr_ioctl.ino);
 		break;
 	case WRAPFS_IOC_GET_LIST_SIZE:
+		err = 0;
 		list_sz = wrapfs_get_list_size(WRAPFS_SB(dentry->d_sb));
 		if (copy_to_user(argp, &list_sz, sizeof(list_sz)))
 			err = -EFAULT;
@@ -151,6 +158,8 @@ static int wrapfs_handle_ioctl(struct file *file, unsigned int cmd,
 		printk("unknown cmd 0x%x\n", cmd);
 		return -EINVAL;
 	}
+
+out:
 	return err;
 }
 
