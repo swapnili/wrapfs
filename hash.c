@@ -81,6 +81,20 @@ static struct wrapfs_hnode *alloc_hnode(const char *path, unsigned long ino)
 	return wh;
 }
 
+static void free_hnode(struct wrapfs_hnode *wh)
+{
+	kfree(wh->path);
+	kfree(wh);
+}
+
+static void remove_hnode(struct wrapfs_hnode *wh)
+{
+	if (wh) {
+		hash_del(&wh->hnode);
+		free_hnode(wh);
+	}
+}
+
 int wrapfs_hide_file(struct wrapfs_sb_info *sbinfo, const char *path,
 		     unsigned long inode)
 {
@@ -107,12 +121,6 @@ out:
 	return err;
 }
 
-static void free_hnode(struct wrapfs_hnode *wh)
-{
-	kfree(wh->path);
-	kfree(wh);
-}
-
 int wrapfs_unhide_file(struct wrapfs_sb_info *sbinfo, const char *path,
 		       unsigned long ino)
 {
@@ -125,7 +133,11 @@ int wrapfs_unhide_file(struct wrapfs_sb_info *sbinfo, const char *path,
 		err = -ENOENT;
 		goto out;
 	}
+
 	wh->flags &= ~WRAPFS_HIDE;
+	/* no users */
+	if (!wh->flags)
+		remove_hnode(wh);
 	printk("unhide %s:%lu\n", path, ino);
 
 out:
@@ -179,7 +191,11 @@ int wrapfs_unblock_file(struct wrapfs_sb_info *sbinfo, const char *path,
 		err = -ENOENT;
 		goto out;
 	}
+
 	wh->flags &= ~WRAPFS_BLOCK;
+	/* no users */
+	if (!wh->flags)
+		remove_hnode(wh);
 	printk("unblock %s:%lu\n", path, ino);
 
 out:
@@ -194,10 +210,8 @@ void wrapfs_remove_hnode(struct wrapfs_sb_info *sbinfo, const char *path,
 
 	spin_lock(&sbinfo->hlock);
 	wh = get_hnode(sbinfo, path, ino);
-	if (wh) {
-		hash_del(&wh->hnode);
-		free_hnode(wh);
-	}
+	if (wh)
+		remove_hnode(wh);
 	spin_unlock(&sbinfo->hlock);
 }
 
@@ -209,8 +223,7 @@ void wrapfs_hide_list_deinit(struct wrapfs_sb_info *sbinfo)
 
 	spin_lock(&sbinfo->hlock);
 	hash_for_each_safe(sbinfo->hlist, i, tmp, wh, hnode) {
-		hash_del(&wh->hnode);
-		free_hnode(wh);
+		remove_hnode(wh);
 	}
 	spin_unlock(&sbinfo->hlock);
 }
