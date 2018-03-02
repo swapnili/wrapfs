@@ -4,7 +4,7 @@ EXTRA_CFLAGS += -DWRAPFS_VERSION=\"$(WRAPFS_VERSION)\"
 
 obj-m += wrapfs.o
 
-wrapfs-y := dentry.o file.o inode.o main.o super.o lookup.o mmap.o chardev.o
+wrapfs-y := dentry.o file.o inode.o main.o super.o lookup.o mmap.o hash.o
 
 KDIR ?= /lib/modules/`uname -r`/build
 
