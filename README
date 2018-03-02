@@ -1,0 +1,53 @@
+Hide/Block files in any filesystem:
+
+Introduction:
+Its an modified wrapfs(Stackable filesystem) to hide/block any files or
+directories in any filesystem. It keeps the information of the hidden/blocked
+files in-memory so after remount it is lost.
+
+It is compiled and tested on linux kernel version 4.4.x
+
+Installation:
+
+WRAPFS:
+1> cd wrapfs/
+2> make
+3> insmod wrapfs.ko
+
+TOOL:
+1> cd tool/
+2> make wrapfsctl
+
+Configuration:
+
+mount wrapfs on any filesystem you want to use underneath.
+eg:
+	mount -t ext4 /dev/sda /mnt
+	mount -t wrapfs /mnt /mnt
+
+USAGE OF THE TOOL:
+
+# wrapfsctl [options]
+		hide     <path>
+		unhide   <path>
+		block    <path>
+		unblock  <path> <inode_number> <mntpt>
+		list     <mntpt>
+		help
+
+#wrapfsctl hide /mnt/file
+/mnt/file hidden
+
+#wrapfsctl block /mnt/file
+/mnt/file blocked
+
+# wrapfsctl list /mnt
+
+STATE           INODE_NUM  FILE
+blocked,hidden  12         /mnt/file
+
+#wrapfsctl unblock /mnt/file 12 /mnt
+unblocked /mnt/file
+
+#wrapfsctl unhide /mnt/file
+unhide /mnt/file
